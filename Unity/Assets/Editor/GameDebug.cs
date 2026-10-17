@@ -609,6 +609,8 @@ namespace NeonKaido.EditorTools
             if (oldC != null) UnityEngine.Object.DestroyImmediate(oldC);
             var rootC = new GameObject("LandmarksCherry");
             var cherry = NeonKaido.Cherry.Build(rootC.transform);
+            var oldP = GameObject.Find("LandmarksProps");
+            if (oldP != null) UnityEngine.Object.DestroyImmediate(oldP);
             var rootP = new GameObject("LandmarksProps");
             var props = NeonKaido.PromenadeProps.Build(rootP.transform);
 
