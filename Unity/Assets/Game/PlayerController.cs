@@ -72,7 +72,7 @@ namespace NeonKaido
         {
             // street-view start (sim 1.5, 30 -> unity z=-30), facing north (down -z)
             transform.position = new Vector3(1.5f, 1.7f, -30f);
-            Yaw = 0f; Pitch = 0.04f;
+            Yaw = Mathf.PI; Pitch = 0.04f;   // face down -z, into the avenue
             _camY = transform.position.y;
             _lastSafe = transform.position;
             PlaceAt(1.5f, 1.7f, -30f, null);
@@ -205,7 +205,8 @@ namespace NeonKaido
             float maxSpeed = _crouch ? CrouchSpd : sprinting ? Sprint : Walk;
 
             var sy = Mathf.Sin(Yaw); var cy = Mathf.Cos(Yaw);
-            float wx = -sy * fwd + cy * right, wz = -cy * fwd - sy * right;
+            // Unity basis at yaw: forward = (sinYaw, 0, cosYaw), right = (cosYaw, 0, -sinYaw)
+            float wx = sy * fwd + cy * right, wz = cy * fwd - sy * right;
             float wl = Mathf.Sqrt(wx * wx + wz * wz);
             if (wl > 1e-4f) { wx /= wl; wz /= wl; }
             float tx = moving ? wx * maxSpeed : 0f, tz = moving ? wz * maxSpeed : 0f;
