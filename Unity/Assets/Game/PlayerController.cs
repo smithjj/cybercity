@@ -41,29 +41,17 @@ namespace NeonKaido
         public void Teleport(float x, float y, float z) { PlaceAt(x, y, z, null); }
 
         int _aaIdx;
-        // F10 cycles AA mode via reflection (HDRP asm not referenced from Assembly-CSharp) —
-        // diagnostic for the train shimmer: TAA / None / FXAA / SMAA
-        static readonly int[] _aaModes = { 4, 0, 1, 3 }; // TemporalAntialiasing=4, None=0, FXAA=1, SMAA=3
-        static System.Type _hdadType;
+        // F10 cycles AA mode — diagnostic for the train shimmer: TAA / None / FXAA / SMAA.
+        // Resolves HDAdditionalCameraData via GetComponent-by-name (HDRP asm not referenced from Assembly-CSharp).
+        static readonly string[] _aaModes = { "TemporalAntialiasing", "None", "FastApproximateAntialiasing", "SubpixelMorphologicalAntialiasing" };
         void CycleAntiAliasing()
         {
-            if (_hdadType == null)
-            {
-                foreach (var a in System.AppDomain.CurrentDomain.GetAssemblies())
-                {
-                    if (!a.GetName().Name.StartsWith("Unity.RenderPipelines.HighDefinition")) continue;
-                    _hdadType = a.GetType("UnityEngine.Rendering.HighDefinition.HDAdditionalCameraData");
-                    break;
-                }
-                if (_hdadType == null) { Debug.Log("[NK] HDRP camera-data type not found"); return; }
-            }
+            var data = _eye.GetComponent("UnityEngine.Rendering.HighDefinition.HDAdditionalCameraData") as Component;
+            if (data == null) { Debug.Log("[NK] no HDAdditionalCameraData on camera"); return; }
             _aaIdx = (_aaIdx + 1) % _aaModes.Length;
-            var data = _eye.GetComponent(_hdadType);
-            if (data == null) data = _eye.gameObject.AddComponent(_hdadType);
-            var prop = _hdadType.GetProperty("antialiasing");
-            var val = System.Enum.Parse(prop.PropertyType, _aaModes[_aaIdx].ToString());
-            prop.SetValue(data, val, null);
-            Debug.Log($"[NK] antialiasing = {val}");
+            var prop = data.GetType().GetProperty("antialiasing");
+            prop.SetValue(data, System.Enum.Parse(prop.PropertyType, _aaModes[_aaIdx]), null);
+            Debug.Log("[NK] antialiasing = " + prop.GetValue(data));
         }
 
         void Awake()
