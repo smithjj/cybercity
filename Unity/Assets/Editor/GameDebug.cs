@@ -276,6 +276,26 @@ namespace NeonKaido.EditorTools
             return NeonKaido.Crowd.Build(root != null ? root.transform : null);
         }
 
+        static System.Collections.Generic.List<string> _audioQueue;
+        static int _audioIdx;
+
+        public static string AudioStep(int batch = 1)
+        {
+            if (_audioQueue == null) { _audioQueue = new System.Collections.Generic.List<string>(); foreach (var o in NeonKaido.AudioBus.Order) _audioQueue.Add(o.name); }
+            for (int b = 0; b < batch; b++)
+            {
+                float p = NeonKaido.AudioBus.GenerateNext();
+                if (p >= 1f) break;
+            }
+            return $"audio gen {_audioIdx}/{_audioQueue.Count} ready={NeonKaido.AudioBus.Ready}";
+        }
+
+        public static string BuildAudio()
+        {
+            NeonKaido.Soundscape.Build();
+            return "audio: " + NeonKaido.Soundscape.Describe();
+        }
+
         public static string BuildGameplay()
         {
             var root = GameObject.Find("CityRoot");
@@ -295,7 +315,8 @@ namespace NeonKaido.EditorTools
                 : which == "weather" ? () => BuildWeather()
                 : which == "crowd" ? () => BuildCrowd()
                 : which == "gameplay" ? () => BuildGameplay()
-                : which == "all" ? () => BuildAtmosphere() + " | " + BuildGround() + " | " + BuildSignage() + " | " + BuildLandmarks() + " | " + BuildVehicles() + " | " + BuildWeather() + " | " + BuildCrowd() + " | " + BuildGameplay()
+                : which == "audiostep" ? () => AudioStep(4)
+                : which == "all" ? () => BuildAtmosphere() + " | " + BuildGround() + " | " + BuildSignage() + " | " + BuildLandmarks() + " | " + BuildVehicles() + " | " + BuildWeather() + " | " + BuildCrowd() + " | " + BuildGameplay() + " | audio queued (run 'audiostep' to synthesize)"
                 : () => "unknown async target";
             if (AsyncBusy) return "busy: " + AsyncResult;
             AsyncBusy = true;
@@ -1241,3 +1262,33 @@ namespace NeonKaido.EditorTools
 // gp8
 
 // gp9
+
+// au1
+
+// au2
+
+// au3
+
+// au4
+
+// au5
+
+// au6
+
+// au7
+
+// au8
+
+// au9
+
+// au10
+
+// au11
+
+// au12
+
+// au13
+
+// au14
+
+// au15

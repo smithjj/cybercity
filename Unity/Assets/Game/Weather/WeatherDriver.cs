@@ -56,6 +56,13 @@ namespace NeonKaido
         static GameObject _rainGo, _splashGo, _steamGo, _dripGo;
 
         public static bool Built { get; private set; }
+        // audio hooks
+        static float _rainNow, _lightningNow;
+        public static float RainNow => _rainNow;
+        public static float LightningNow => _lightningNow;
+        public static float GustNow => _gust;
+        public static double LastStrikeT = -100;
+        public static float LastStrikeDist = 800;
 
         // ------------------------------------------------------------------ build
 
@@ -380,6 +387,7 @@ namespace NeonKaido
             var wind = ctx != null ? ctx.weather.wind : new Vector2(0.6f, -0.25f);
             _frame++;
 
+            _rainNow = rain; _lightningNow = li;
             GatherLights(camPos, t);
             PushGlobals(dt, t, camPos, rain, li, wind);
             DripsUpdate(dt, t, camPos, wind);

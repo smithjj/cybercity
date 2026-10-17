@@ -455,6 +455,23 @@ namespace NeonKaido
             return true;
         }
 
+        // audio hook: up to n world positions + speeds of moving traffic cars near the player
+        public static List<(Vector3 pos, float speed)> GetTrafficSample(int n, float maxD, Vector3 playerPos)
+        {
+            var o = new List<(Vector3, float)>();
+            if (_cars == null) return o;
+            float md2 = maxD * maxD;
+            foreach (var c in _cars)
+            {
+                if (o.Count >= n) break;
+                if (c.go == null) continue;
+                var p = c.go.transform.position;
+                if ((p - playerPos).sqrMagnitude > md2) continue;
+                o.Add((p, c.v));
+            }
+            return o;
+        }
+
         public static void Update(float dt, float t, Vector3 playerPos)
         {
             // statics wiped by a domain reload (script recompile): rebuild deterministically

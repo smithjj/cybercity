@@ -67,6 +67,8 @@ namespace NeonKaido
             NeonKaido.Crowd.Update(Time.deltaTime, (float)(Time.timeSinceLevelLoadAsDouble % 3600.0), transform.position);
             NeonKaido.Gameplay.Update(Time.deltaTime, (float)(Time.timeSinceLevelLoadAsDouble % 3600.0), transform.position);
             if (Input.GetKeyDown(KeyCode.F)) NeonKaido.Gameplay.TakeLift();
+            NeonKaido.Soundscape.Update(Time.deltaTime, Time.timeAsDouble % 86400.0);
+            if (Input.GetKeyDown(KeyCode.M)) { NeonKaido.Soundscape.ToggleMusic(); }
             NeonKaido.TrafficSignals.Update((float)(Time.timeSinceLevelLoadAsDouble % 3600.0));
             NeonKaido.Koi.Update(Time.timeSinceLevelLoadAsDouble % 3600.0);
             NeonKaido.Trains.Update(Time.timeSinceLevelLoadAsDouble % 3600.0);
