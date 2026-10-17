@@ -49,9 +49,17 @@ namespace NeonKaido
             var data = _eye.GetComponent("UnityEngine.Rendering.HighDefinition.HDAdditionalCameraData") as Component;
             if (data == null) { Debug.Log("[NK] no HDAdditionalCameraData on camera"); return; }
             _aaIdx = (_aaIdx + 1) % _aaModes.Length;
-            var prop = data.GetType().GetProperty("antialiasing");
-            prop.SetValue(data, System.Enum.Parse(prop.PropertyType, _aaModes[_aaIdx]), null);
-            Debug.Log("[NK] antialiasing = " + prop.GetValue(data));
+            var t = data.GetType();
+            var fi = t.GetField("antialiasing");
+            fi.SetValue(data, System.Enum.Parse(fi.FieldType, _aaModes[_aaIdx]));
+            // while TAA is on, bias the anti-flicker/jitter knobs against bright-emissive shimmer
+            if (_aaModes[_aaIdx] == "TemporalAntialiasing")
+            {
+                t.GetField("taaAntiFlicker")?.SetValue(data, 0.85f);
+                t.GetField("taaRingingReduction")?.SetValue(data, 0.5f);
+                t.GetField("taaMotionVectorRejection")?.SetValue(data, 0.5f);
+            }
+            Debug.Log("[NK] antialiasing = " + fi.GetValue(data));
         }
 
         void Awake()
