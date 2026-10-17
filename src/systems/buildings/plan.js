@@ -316,7 +316,7 @@ export function buildPlan(L) {
   // East bank of the river (far, low detail) facing the river
   {
     const R = { x0: riverBankE, x1: 400, z0: -700, z1: 170 };
-    fillRegion(R, [270, 330], [zGap(-480, 4), zGap(-330, 4), zGap(-200, 4), zGap(-60, 4), zGap(60, 4)], 8, (r) => {
+    fillRegion(R, [270, 330], [zGap(-480, 4), zGap(-330, 4), zGap(-200, 4), zGap(-140, railHalf + 2), zGap(-240, expHalf + 2), zGap(-60, 4), zGap(60, 4)], 8, (r) => {
       const c = backCfg(r, 0, () => 999);
       c.cfg.towerFloors = [10, 34];
       if (Math.abs(r.x0 - riverBankE) < EPS) c.streets.unshift({ side: 'nx', district: 'river', shop: false, depth: [10, 16], width: [8, 16], floors: [5, 16], detail: 'lo' });

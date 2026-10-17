@@ -455,7 +455,7 @@ namespace NeonKaido
             {
                 var R = new Rct(riverBankE, 400, -700, 170);
                 FillRegion(R, new[] { 270.0, 330.0 },
-                    new List<(double, double)> { ZGap(-480, 4), ZGap(-330, 4), ZGap(-200, 4), ZGap(-60, 4), ZGap(60, 4) }, 8, r =>
+                    new List<(double, double)> { ZGap(-480, 4), ZGap(-330, 4), ZGap(-200, 4), ZGap(Layout.RailZ, railHalf + 2), ZGap(Layout.ExpresswayZ, Layout.ExpresswayWidth / 2 + 2), ZGap(-60, 4), ZGap(60, 4) }, 8, r =>
                     {
                         var c = BackCfg(r, 0, q => 999);
                         c.cfg.TowerFloors = new[] { 10, 34 };
