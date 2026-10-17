@@ -1392,3 +1392,9 @@ namespace NeonKaido.EditorTools
 // hud5
 
 // hud6
+
+// rain1
+
+// rain2
+
+// tex1

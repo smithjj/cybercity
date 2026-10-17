@@ -188,6 +188,13 @@ namespace NeonKaido
 
             if (Input.GetKeyDown(KeyCode.V)) { WalkMode = !WalkMode; _locked = false; }
             if (Input.GetKeyDown(KeyCode.H)) NeonKaido.GameplayHud.Toggle();
+            if (Input.GetKeyDown(KeyCode.R))
+            {
+                NeonKaido.WeatherDriver.RainOverride = NeonKaido.WeatherDriver.RainOverride >= 0f ? -1f : 0f;
+                bool clear = NeonKaido.WeatherDriver.RainOverride >= 0f;
+                NeonKaido.GameplayHud.Note(clear ? "RAIN: OFF" : "RAIN: STORM",
+                    clear ? "CLOUD SEEDERS HOLDING // SKIES CLEARING" : "STORM RESUMING // WET GROUND");
+            }
             if (Input.GetKeyDown(KeyCode.F10)) CycleAntiAliasing();
 
             // cursor lock shared by both modes

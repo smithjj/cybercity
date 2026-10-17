@@ -58,6 +58,11 @@ namespace NeonKaido
             AddToast("GIG DOWNLOADED // " + g.Area, "NEW GIG: " + g.Title, g.Text, null, info: false, 6f);
         }
 
+        public static void Note(string h, string l1)
+        {
+            AddToast("SYS//KBK-09", h, l1, null, info: true, 3.5f);
+        }
+
         public static void GigCompleteToast(GigDef g, int eddies)
         {
             AddToast(g.Fixer + " // GIG COMPLETE", g.Title,

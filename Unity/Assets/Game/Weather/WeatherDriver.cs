@@ -63,6 +63,8 @@ namespace NeonKaido
         public static float GustNow => _gust;
         public static double LastStrikeT = -100;
         public static float LastStrikeDist = 800;
+        // <0 = storm schedule as usual; 0 = clear skies (R toggle); >0 = pinned storm
+        public static float RainOverride = -1f;
 
         // ------------------------------------------------------------------ build
 
@@ -372,12 +374,19 @@ namespace NeonKaido
             _prevCam = camPos;
 
             var ctx = GameContext.I;
-            float rain = ctx != null ? ctx.weather.rain : 1f;
+            float rain;
+            if (RainOverride >= 0f)
+            {
+                // R toggle holds an eternal regime; glide toward it (0 = clear skies)
+                var cur = ctx != null ? ctx.weather.rain : 1f;
+                rain = Mathf.Lerp(cur, RainOverride, Mathf.Min(1f, dt * 0.35f));
+            }
+            else rain = ctx != null ? ctx.weather.rain : 1f;
             // lightning (before easing: feeds ctx.weather.lightning -> Atmo flash)
-            float li = LightningUpdate(dt, t, rain);
+            float li = RainOverride >= 0f ? 0f : LightningUpdate(dt, t, rain);
             if (ctx != null) ctx.weather.lightning = li;
-            // rain intensity easing toward target 1
-            rain += (1f - rain) * Mathf.Min(1f, dt * 0.5f);
+            // storm drift toward 1 only when in auto mode
+            if (RainOverride < 0f) rain += (1f - rain) * Mathf.Min(1f, dt * 0.5f);
             _wetness += ((rain > 0.05f ? 1f : 0f) - _wetness) * Mathf.Min(1f, dt * (rain > 0.05f ? 0.2f : 0.02f));
             if (ctx != null) { ctx.weather.rain = rain; ctx.weather.wetness = _wetness; }
             // gusts
