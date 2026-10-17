@@ -41,13 +41,24 @@ namespace NeonKaido
         public void Teleport(float x, float y, float z) { PlaceAt(x, y, z, null); }
 
         int _aaIdx;
-        // F10 cycles AA mode — diagnostic for the train shimmer: TAA / None / FXAA / SMAA.
-        // Resolves HDAdditionalCameraData via GetComponent-by-name (HDRP asm not referenced from Assembly-CSharp).
-        static readonly string[] _aaModes = { "TemporalAntialiasing", "None", "FastApproximateAntialiasing", "SubpixelMorphologicalAntialiasing" };
+        // F10 cycles AA mode — diagnostic for the train shimmer. Modes are discovered from the
+        // actual enum (SMAA was removed from some HDRP versions), so missing names are skipped.
+        static readonly string[] _aaWanted = { "TemporalAntialiasing", "None", "FastApproximateAntialiasing", "SubpixelMorphologicalAntialiasing" };
+        static string[] _aaModes;
         void CycleAntiAliasing()
         {
             var data = _eye.GetComponent("UnityEngine.Rendering.HighDefinition.HDAdditionalCameraData") as Component;
             if (data == null) { Debug.Log("[NK] no HDAdditionalCameraData on camera"); return; }
+            if (_aaModes == null)
+            {
+                var fi0 = data.GetType().GetField("antialiasing");
+                var names = System.Enum.GetNames(fi0.FieldType);
+                var list = new System.Collections.Generic.List<string>();
+                foreach (var w in _aaWanted) if (System.Array.IndexOf(names, w) >= 0) list.Add(w);
+                _aaModes = list.ToArray();
+                Debug.Log("[NK] AA cycles: " + string.Join(", ", _aaModes));
+                _aaIdx = 0;
+            }
             _aaIdx = (_aaIdx + 1) % _aaModes.Length;
             var t = data.GetType();
             var fi = t.GetField("antialiasing");
@@ -58,6 +69,7 @@ namespace NeonKaido
                 t.GetField("taaAntiFlicker")?.SetValue(data, 0.85f);
                 t.GetField("taaRingingReduction")?.SetValue(data, 0.5f);
                 t.GetField("taaMotionVectorRejection")?.SetValue(data, 0.5f);
+                Debug.Log("[NK] TAA anti-flicker preset applied");
             }
             Debug.Log("[NK] antialiasing = " + fi.GetValue(data));
         }
