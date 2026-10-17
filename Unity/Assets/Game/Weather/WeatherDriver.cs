@@ -442,8 +442,10 @@ namespace NeonKaido
                     var root = GameObject.Find(rn);
                     if (root != null) _lights.AddRange(root.GetComponentsInChildren<Light>());
                 }
+                _lights.RemoveAll(l => l == null);   // purge refs killed by scene rebuilds
                 _nextScan = t + 2f;
             }
+            _lights.RemoveAll(l => l == null);
             var scored = new List<(Light l, Vector3 p, float range, float s)>();
             foreach (var l in _lights)
             {
