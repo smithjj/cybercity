@@ -21,6 +21,14 @@ namespace NeonKaido
             var b = new LmBatch();
             // deck
             b.Box("concrete", Xb - Xa, 0.45f, Hw * 2f, (Xa + Xb) / 2f, D - 0.22f, Z);
+            // walkable deck collider (top at D+0.045)
+            {
+                var cgo = new GameObject("bridge_deck_col");
+                cgo.transform.SetParent(root, false);
+                cgo.transform.position = new Vector3((Xa + Xb) / 2f, D - 0.1f, Z);
+                var bc = cgo.AddComponent<BoxCollider>();
+                bc.size = new Vector3(Xb - Xa, 0.3f, Hw * 2f);
+            }
             b.Box("paving", Xb - Xa, 0.05f, Hw * 2f - 0.8f, (Xa + Xb) / 2f, D + 0.02f, Z);
             for (int si = 0; si < 2; si++)
             {

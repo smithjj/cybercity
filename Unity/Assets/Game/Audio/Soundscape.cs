@@ -262,6 +262,18 @@ namespace NeonKaido
         }
 
         // ---------------- update ----------------
+        // footstep: step0-7, or a puddle variant when the ground is wet (matches JS surface pick)
+        public static void Footstep(float vol, bool sprint, bool crouch)
+        {
+            float rain = WeatherDriver.Built ? WeatherDriver.RainNow : 0f;
+            bool puddle = rain > 0.3f && UnityEngine.Random.value < 0.45f;
+            string name = puddle ? "puddle" + UnityEngine.Random.Range(0, 4) : "step" + UnityEngine.Random.Range(0, 8);
+            float g = (sprint ? 0.5f : 0.32f) * (crouch ? 0.55f : 1f) * vol;
+            float rate = UnityEngine.Random.value * 0.12f + 0.94f;
+            if (PlayerController.I != null)
+                AudioBus.PlayOneShot(name, PlayerController.I.transform.position + Vector3.down * 1.2f, g, rate, 30f);
+        }
+
         public static void Update(float dt, double t)
         {
             if (AudioBus.Root == null) { Built = false; AudioBus.ForceReady(AudioBus.Clips.Count >= 39); }

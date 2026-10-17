@@ -183,6 +183,21 @@ namespace NeonKaido
             // push light arrays into the building materials (only real materials know _BLPos)
             PushLightArrays(blPos, blCol, mats != null ? new List<Material>(mats.Values) : new List<Material>(), acMat);
 
+            // physical colliders (BCollider records — matches the Rapier boxes in JS)
+            var colRoot = new GameObject("Colliders");
+            colRoot.transform.SetParent(root, false);
+            colRoot.isStatic = true;
+            foreach (var bc in outp.Colliders)
+            {
+                var go = new GameObject("col");
+                go.transform.SetParent(colRoot.transform, false);
+                go.transform.position = new Vector3((float)bc.X, (float)bc.Y, (float)-bc.Z);
+                if (bc.Rot != null) go.transform.rotation = new Quaternion((float)bc.Rot[0], (float)bc.Rot[1], (float)-bc.Rot[2], (float)bc.Rot[3]);
+                else if (bc.RotY != 0) go.transform.rotation = Quaternion.Euler(0, (float)bc.RotY * Mathf.Rad2Deg, 0);
+                var box = go.AddComponent<BoxCollider>();
+                box.size = new Vector3((float)(bc.Hx * 2), (float)(bc.Hy * 2), (float)(bc.Hz * 2));
+            }
+
             return $"buildings: {meshes} meshes {_builtTris} tris, {kept.Count}/{outp.Lights.Count} lights, {outp.AcM.Count}/{outp.TankM.Count}/{outp.PtankM.Count} inst, {outp.Colliders.Count} colliders";
         }
 

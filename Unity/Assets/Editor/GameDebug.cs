@@ -468,8 +468,54 @@ namespace NeonKaido.EditorTools
             var alleyMat = SurfMaterial(3);
             var wallMat = SurfMaterial(4);
 
-            List<BoxCollider> cc;
-            AddMesh(root, "Base", GroundMeshes.BuildBase(data.BaseRects, out cc), roadMat);
+            AddMesh(root, "Base", GroundMeshes.BuildBase(data.BaseRects, out _), roadMat);
+
+            // physical colliders: base slabs, sidewalks (AABB approx), promenade, alley slabs
+            var colRoot = new GameObject("Colliders");
+            colRoot.transform.SetParent(root.transform, false);
+            colRoot.isStatic = true;
+            foreach (var r in data.BaseRects)
+            {
+                var go = new GameObject("col");
+                go.transform.SetParent(colRoot.transform, false);
+                go.transform.position = new Vector3((float)((r.X0 + r.X1) / 2), -0.15f, (float)(-(r.Z0 + r.Z1) / 2));
+                var box = go.AddComponent<BoxCollider>();
+                box.size = new Vector3((float)(r.X1 - r.X0), 0.3f, (float)(r.Z1 - r.Z0));
+            }
+            foreach (var sw in data.Sidewalks)
+            {
+                // AABB of the collider poly (sim [x,z] pairs)
+                float minx = float.MaxValue, maxx = float.MinValue, minz = float.MaxValue, maxz = float.MinValue;
+                if (sw.Collider == null) continue;
+                foreach (var pt in sw.Collider)
+                {
+                    minx = Mathf.Min(minx, (float)pt[0]); maxx = Mathf.Max(maxx, (float)pt[0]);
+                    minz = Mathf.Min(minz, (float)-pt[1]); maxz = Mathf.Max(maxz, (float)-pt[1]);
+                }
+                if (minx > maxx) continue;
+                var go = new GameObject("colsw");
+                go.transform.SetParent(colRoot.transform, false);
+                go.transform.position = new Vector3((minx + maxx) / 2, (float)GroundPlan.CurbH, (minz + maxz) / 2);
+                var box = go.AddComponent<BoxCollider>();
+                box.size = new Vector3(maxx - minx, 0.3f, maxz - minz);
+            }
+            {
+                var p = data.Promenade;
+                var go = new GameObject("colprom");
+                go.transform.SetParent(colRoot.transform, false);
+                go.transform.position = new Vector3((float)((p.X0 + p.X1) / 2), (float)GroundPlan.PromY, (float)(-(p.Z0 + p.Z1) / 2));
+                var box = go.AddComponent<BoxCollider>();
+                box.size = new Vector3((float)(p.X1 - p.X0), 0.3f, (float)(p.Z1 - p.Z0));
+            }
+            foreach (var r in data.AlleyRects)
+            {
+                double y = r.X0 == GroundPlan.StairsXStart ? 0 : GroundPlan.StairsRise;
+                var go = new GameObject("colalley");
+                go.transform.SetParent(colRoot.transform, false);
+                go.transform.position = new Vector3((float)((r.X0 + r.X1) / 2), (float)y, (float)(-(r.Z0 + r.Z1) / 2));
+                var box = go.AddComponent<BoxCollider>();
+                box.size = new Vector3((float)(r.X1 - r.X0), 0.3f, (float)(r.Z1 - r.Z0));
+            }
 
             var alleyQuads = new List<Tuple<GroundGeo.Rect2, double>>();
             foreach (var r in data.AlleyRects)
@@ -1294,3 +1340,7 @@ namespace NeonKaido.EditorTools
 // au14
 
 // au15
+
+// wk1
+
+// wk2

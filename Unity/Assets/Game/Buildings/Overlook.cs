@@ -3,6 +3,8 @@
 using System;
 using System.Collections.Generic;
 
+using UnityEngine;
+
 namespace NeonKaido
 {
     public static class Overlook
@@ -22,6 +24,18 @@ namespace NeonKaido
             var slab = BuildArchitecture.TrimAttr(1, 3, 0.45, 0.31);
             // deck slab (cantilever)
             fac.Box((x0 + x1) / 2, y - 0.2, (zFront + zEdge) / 2, x1 - x0, 0.4, zFront - zEdge, slab);
+            // walkable deck collider (top at y+0.005)
+            {
+                var broot = GameObject.Find("/Buildings");
+                if (broot != null)
+                {
+                    var cgo = new GameObject("overlook_deck_col");
+                    cgo.transform.SetParent(broot.transform, false);
+                    cgo.transform.position = new Vector3((float)((x0 + x1) / 2), (float)(y - 0.15), (float)(-(zFront + zEdge) / 2));
+                    var bc = cgo.AddComponent<BoxCollider>();
+                    bc.size = new Vector3((float)(x1 - x0), 0.3f, (float)(zFront - zEdge));
+                }
+            }
             // deck surface: wet, puddled roof material
             var ra = new BAttrSet().Set("aWin", new[] { 0.2, 3, 3, 9999 }).Set("aWin2", new[] { 0.5, 0.5, 0, 4 }).Set("aWin3", new[] { 9999, 7, 3.0, 0.4 });
             fac.Quad(new[] { x0, y + 0.005, zFront }, new[] { x1, y + 0.005, zFront }, new[] { x1, y + 0.005, zEdge }, new[] { x0, y + 0.005, zEdge },
