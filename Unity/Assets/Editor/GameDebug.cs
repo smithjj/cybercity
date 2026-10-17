@@ -1380,3 +1380,15 @@ namespace NeonKaido.EditorTools
 // fx16
 
 // fx17
+
+// hud1
+
+// hud2
+
+// hud3
+
+// hud4
+
+// hud5
+
+// hud6

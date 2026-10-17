@@ -22,6 +22,10 @@ namespace NeonKaido
         Transform _eye;
         bool _eyeIsRoot;   // NKCamera hosts the camera on the player root itself
         public bool WalkMode = true;
+        // HUD inputs (GameplayHud reads these per frame)
+        public bool Crouched => _crouch;
+        public bool SprintGait;   // set each frame in StepWalk
+        public bool FlyMode => !WalkMode;
         bool _locked;
 
         // movement state
@@ -183,6 +187,7 @@ namespace NeonKaido
             NeonKaido.Trains.Update(td);
 
             if (Input.GetKeyDown(KeyCode.V)) { WalkMode = !WalkMode; _locked = false; }
+            if (Input.GetKeyDown(KeyCode.H)) NeonKaido.GameplayHud.Toggle();
             if (Input.GetKeyDown(KeyCode.F10)) CycleAntiAliasing();
 
             // cursor lock shared by both modes
@@ -239,6 +244,7 @@ namespace NeonKaido
             bool moving = Mathf.Abs(fwd) + Mathf.Abs(right) > 0.01f;
             bool sprinting = (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)) && fwd > 0 && !_crouch && moving;
             float spd = new Vector2(_vel.x, _vel.z).magnitude;
+            SprintGait = sprinting && spd > 3.5f;
             _sprintK = Damp(_sprintK, (sprinting && spd > 4.5f) ? 1 : 0, 5, dt);
             float maxSpeed = _crouch ? CrouchSpd : sprinting ? Sprint : Walk;
 
