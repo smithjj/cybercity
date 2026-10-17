@@ -54,17 +54,23 @@ namespace NeonKaido
                 var b = r.bounds;
                 if (b.size.sqrMagnitude < 1f) continue;
                 float d = Vector3.Distance(b.center, eye);
-                if (d < 8f || d > 90f) continue;
+                if (d < 0.5f || d > 240f) continue;
                 float dy = b.center.y - eye.y;
-                if (dy > 9f || dy < -6f) continue;
+                if (dy > 24f || dy < -6f) continue;
                 var vp = cam.WorldToViewportPoint(b.center);
                 if (vp.z < 0.5f) continue;
                 if (vp.x < 0.1f || vp.x > 0.9f || vp.y < 0.15f || vp.y > 0.85f) continue;
-                rows.Add((d, r.gameObject.name + " d=" + ((int)d) + "m y=" + ((int)b.center.y) + " sz=" + b.size.ToString("F1") + (r.isVisible ? "" : " INVISIBLE")));
+                rows.Add((d, r.gameObject.name + " d=" + ((int)d) + "m y=" + ((int)b.center.y) + " sz=" + b.size.ToString("F1") + (b.size.x > 6f || b.size.z > 6f ? " *** BIG ***" : "") + (r.isVisible ? "" : " INVISIBLE")));
             }
             rows.Sort((a, b) => a.d.CompareTo(b.d));
-            Debug.Log("[NK F8] pos=" + transform.position.ToString("F1") + " yaw=" + Mathf.RoundToInt(Yaw * Mathf.Rad2Deg));
-            for (int i = 0; i < rows.Count && i < 14; i++) Debug.Log("[NK F8] " + rows[i].Item2);
+            Debug.Log("[NK F8] header pos=" + transform.position.ToString("F1") + " yaw=" + Mathf.RoundToInt(Yaw * Mathf.Rad2Deg));
+            int big = 0;
+            foreach (var rr in rows) if (rr.d >= 9f) big++;
+            foreach (var rr in rows)
+            {
+                if (big <= 60 && rr.d < 10f) continue;   // nearest clutter ring only shown if few hits
+                Debug.Log("[NK F8] " + rr.line);
+            }
             Debug.Log("[NK F8] " + rows.Count + " candidates");
         }
 
