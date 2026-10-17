@@ -48,7 +48,7 @@ namespace NeonKaido
         {
             var cam = _eye.GetComponent<Camera>();
             var eye = _eye.position;
-            var rows = new System.Collections.Generic.List<string>();
+            var rows = new System.Collections.Generic.List<(float d, string line)>();
             foreach (var r in Object.FindObjectsByType<Renderer>(FindObjectsSortMode.None))
             {
                 var b = r.bounds;
@@ -60,16 +60,11 @@ namespace NeonKaido
                 var vp = cam.WorldToViewportPoint(b.center);
                 if (vp.z < 0.5f) continue;
                 if (vp.x < 0.1f || vp.x > 0.9f || vp.y < 0.15f || vp.y > 0.85f) continue;
-                rows.Add(r.gameObject.name + " d=" + ((int)d) + "m y=" + ((int)b.center.y) + " sz=" + b.size.ToString("F1") + (r.isVisible ? "" : " INVISIBLE"));
+                rows.Add((d, r.gameObject.name + " d=" + ((int)d) + "m y=" + ((int)b.center.y) + " sz=" + b.size.ToString("F1") + (r.isVisible ? "" : " INVISIBLE")));
             }
-            rows.Sort((a, b) =>
-            {
-                float da = float.Parse(a.Substring(a.IndexOf('d') + 2, a.IndexOf('m') - a.IndexOf('d') - 3));
-                float db = float.Parse(b.Substring(b.IndexOf('d') + 2, b.IndexOf('m') - b.IndexOf('d') - 3));
-                return da.CompareTo(db);
-            });
+            rows.Sort((a, b) => a.d.CompareTo(b.d));
             Debug.Log("[NK F8] pos=" + transform.position.ToString("F1") + " yaw=" + Mathf.RoundToInt(Yaw * Mathf.Rad2Deg));
-            for (int i = 0; i < rows.Count && i < 14; i++) Debug.Log("[NK F8] " + rows[i]);
+            for (int i = 0; i < rows.Count && i < 14; i++) Debug.Log("[NK F8] " + rows[i].Item2);
             Debug.Log("[NK F8] " + rows.Count + " candidates");
         }
 
