@@ -587,6 +587,8 @@ namespace NeonKaido
             foreach (var k in attrDefs.Keys) Attrs[k] = new List<double>();
         }
 
+        public Dictionary<string, double[]> Defs => _defs;
+
         int PushVert(double[] p, double[] n, double[] t, double[] uv2, BAttrSet a)
         {
             Pos.Add(p[0]); Pos.Add(p[1]); Pos.Add(p[2]);

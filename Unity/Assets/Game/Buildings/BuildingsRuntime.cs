@@ -53,6 +53,77 @@ namespace NeonKaido
 
         static int _builtTris;
 
+        // Glass (and other translucent) quads were merged per 96m map-cell regardless of
+        // orientation — a whole block ring of storefront glass became ONE one-sided ribbon
+        // (the "ghost train" spanning the road, visible from one side only). Split glass
+        // buckets per facade plane: dominant normal axis + quantized plane coordinate.
+        static void RefineGlassChunking(Dictionary<string, BBucket> map)
+        {
+            var finished = new List<string>();
+            var ray = map.Keys.ToList();
+            foreach (var key in ray)
+            {
+                if (!key.Contains("|glass")) continue;
+                var src = map[key];
+                if (src.Idx.Count < 6 * 8) continue; // small buckets stay as-is
+
+                var groups = new Dictionary<string, (BBucket b, List<int> quads)>();
+                int nq = src.Idx.Count / 6;
+                for (int q = 0; q < nq; q++)
+                {
+                    int v0 = (int)src.Idx[q * 6];
+                    double nx = src.Nrm[v0 * 3], ny = src.Nrm[v0 * 3 + 1], nz = src.Nrm[v0 * 3 + 2];
+                    int ax = 0, ax2 = 1;
+                    double an = Math.Abs(nx), test = Math.Abs(ny);
+                    if (test > an) { an = test; ax = 1; ax2 = 0; }
+                    test = Math.Abs(nz); if (test > an) { an = test; ax = 2; ax2 = 0; }
+                    double plane = src.Pos[v0 * 3 + ax];
+                    string gk = ax + ":" + Math.Round(plane * 4.0) / 4.0;
+                    if (!groups.TryGetValue(gk, out var g))
+                    {
+                        var nb = new BBucket(src.MatKey, src.Defs);
+                        g = (nb, new List<int>());
+                        groups[gk] = g;
+                    }
+                    g.quads.Add(q);
+                }
+                if (groups.Count <= 1) continue;
+
+                finished.Add(key);
+                map.Remove(key);
+                int gi = 0;
+                foreach (var g in groups.Values)
+                {
+                    var dst = g.b;
+                    foreach (var q in g.quads) CopyQuad(src, dst, q * 6);
+                    map[key + "#p" + (gi++)] = dst;
+                }
+            }
+            _glassChunks = finished.Count;
+        }
+        static int _glassChunks;
+
+        static void CopyQuad(BBucket src, BBucket dst, int quadStart)
+        {
+            // quad layout: 4 verts (i0..i0+3), indices i0,i0+1,i0+2, i0+1,i0+2,i0+3
+            int baseIdx = dst.Pos.Count / 3;
+            int[] vi = { (int)src.Idx[quadStart], (int)src.Idx[quadStart + 1], (int)src.Idx[quadStart + 2], (int)src.Idx[quadStart + 3] };
+            foreach (var vj in vi)
+            {
+                for (int c = 0; c < 3; c++)
+                {
+                    dst.Pos.Add(src.Pos[vj * 3 + c]);
+                    dst.Nrm.Add(src.Nrm[vj * 3 + c]);
+                }
+                for (int c = 0; c < 4; c++) dst.Tan.Add(src.Tan[vj * 4 + c]);
+                for (int c = 0; c < 2; c++) dst.Uv.Add(src.Uv[vj * 2 + c]);
+                foreach (var av in src.Attrs)
+                    for (int c = 0; c < 4; c++) dst.Attrs[av.Key].Add(av.Value[vj * 4 + c]);
+            }
+            dst.Idx.Add(baseIdx); dst.Idx.Add(baseIdx + 1); dst.Idx.Add(baseIdx + 2);
+            dst.Idx.Add(baseIdx + 1); dst.Idx.Add(baseIdx + 2); dst.Idx.Add(baseIdx + 3);
+        }
+
         public static string BuildAll(Dictionary<string, Material> mats = null, Material acMat = null)
         {
             Shader.SetGlobalFloat("_AgxExposure", 0.82f); // JS PostFX exposure
@@ -80,6 +151,7 @@ namespace NeonKaido
             // ---------- chunk meshes ----------
             int meshes = 0;
             _builtTris = 0;
+            RefineGlassChunking(B.Map);
             foreach (var kv in B.Map)
             {
                 var b = kv.Value;
