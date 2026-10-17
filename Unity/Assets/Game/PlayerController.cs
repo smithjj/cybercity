@@ -42,6 +42,37 @@ namespace NeonKaido
 
         public static PlayerController I;
 
+        // F8: dump every renderer within 8-90m whose screen projection crosses the central
+        // band — call this while the "train in the road" is visible; the console names the culprit
+        void DumpEyeBand()
+        {
+            var cam = _eye.GetComponent<Camera>();
+            var eye = _eye.position;
+            var rows = new System.Collections.Generic.List<string>();
+            foreach (var r in Object.FindObjectsByType<Renderer>(FindObjectsSortMode.None))
+            {
+                var b = r.bounds;
+                if (b.size.sqrMagnitude < 1f) continue;
+                float d = Vector3.Distance(b.center, eye);
+                if (d < 8f || d > 90f) continue;
+                float dy = b.center.y - eye.y;
+                if (dy > 9f || dy < -6f) continue;
+                var vp = cam.WorldToViewportPoint(b.center);
+                if (vp.z < 0.5f) continue;
+                if (vp.x < 0.1f || vp.x > 0.9f || vp.y < 0.15f || vp.y > 0.85f) continue;
+                rows.Add(r.gameObject.name + " d=" + ((int)d) + "m y=" + ((int)b.center.y) + " sz=" + b.size.ToString("F1") + (r.isVisible ? "" : " INVISIBLE"));
+            }
+            rows.Sort((a, b) =>
+            {
+                float da = float.Parse(a.Substring(a.IndexOf('d') + 2, a.IndexOf('m') - a.IndexOf('d') - 3));
+                float db = float.Parse(b.Substring(b.IndexOf('d') + 2, b.IndexOf('m') - b.IndexOf('d') - 3));
+                return da.CompareTo(db);
+            });
+            Debug.Log("[NK F8] pos=" + transform.position.ToString("F1") + " yaw=" + Mathf.RoundToInt(Yaw * Mathf.Rad2Deg));
+            for (int i = 0; i < rows.Count && i < 14; i++) Debug.Log("[NK F8] " + rows[i]);
+            Debug.Log("[NK F8] " + rows.Count + " candidates");
+        }
+
         public void Teleport(float x, float y, float z) { PlaceAt(x, y, z, null); }
 
         int _aaIdx;
@@ -188,6 +219,7 @@ namespace NeonKaido
 
             if (Input.GetKeyDown(KeyCode.V)) { WalkMode = !WalkMode; _locked = false; }
             if (Input.GetKeyDown(KeyCode.H)) NeonKaido.GameplayHud.Toggle();
+            if (Input.GetKeyDown(KeyCode.F8)) DumpEyeBand();
             if (Input.GetKeyDown(KeyCode.R))
             {
                 NeonKaido.WeatherDriver.RainOverride = NeonKaido.WeatherDriver.RainOverride >= 0f ? -1f : 0f;
