@@ -23,7 +23,11 @@ namespace NeonKaido
             Settings.Load();
             // sweep orphaned markers from earlier failed/partial builds
             foreach (var go in Object.FindObjectsByType<GameObject>(UnityEngine.FindObjectsInactive.Include, UnityEngine.FindObjectsSortMode.None))
-                if (go.name == "gig-marker" && go.scene.IsValid()) Object.DestroyImmediate(go);
+            {
+                if (go == null) continue; // fake-null: destroyed but still enumerated (scene unload race)
+                try { if (go.name == "gig-marker" && go.scene.IsValid()) Object.DestroyImmediate(go); }
+                catch (System.Exception) { /* object died mid-sweep */ }
+            }
             var root = parent != null ? parent : new GameObject("Gameplay").transform;
             Gigs = new Gigs(root);
             _zone = default; _zoneCand = default; _zoneT = 0f;
