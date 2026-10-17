@@ -1,0 +1,93 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: Road
+  m_Shader: {fileID: 4800000, guid: ad5c9e833afb1ef4d8fb33ae1240d11d, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _AsphaltBC:
+        m_Texture: {fileID: 2800000, guid: 4a8e7fb43fc2bf646a611fa61f597e29, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _AsphaltBN:
+        m_Texture: {fileID: 2800000, guid: b398b6a0d59e98746bedc5d8791deeb8, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _AsphaltC:
+        m_Texture: {fileID: 2800000, guid: bdf08ccf2c1e3c94bbf88e5baca1f942, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _AsphaltN:
+        m_Texture: {fileID: 2800000, guid: 59eabc8557bc5b54593d6503fe719ca9, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _ConcreteC:
+        m_Texture: {fileID: 2800000, guid: b2fc84a5af0747941adc982019269126, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _ConcreteN:
+        m_Texture: {fileID: 2800000, guid: 27f472e441b195746ac8a23f9f6adf96, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _GrateC:
+        m_Texture: {fileID: 2800000, guid: 8b7fe16aebfcf5b4eb478c5be11f90b2, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _GrateN:
+        m_Texture: {fileID: 2800000, guid: 5e5bf8fd0eb52994582098afb0a13069, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _ManholeC:
+        m_Texture: {fileID: 2800000, guid: a633e39fccac16647a0f2bf87d0b44a2, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _ManholeN:
+        m_Texture: {fileID: 2800000, guid: 5a4289dfad0b8024280d8d1fa9b23f44, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _MarkAtlas:
+        m_Texture: {fileID: 2800000, guid: 5897af40feb363443b4ef3434a40bc27, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _PaintWearC:
+        m_Texture: {fileID: 2800000, guid: e5a5d8a98a2ed004db7bce701cb257d9, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: []
+    m_Floats:
+    - _Rain: 1
+    - _SimTime: 0
+    - _SkyBrightness: 1
+    - _Wetness: 1
+    m_Colors:
+    - _AmbientGround: {r: 0.03, g: 0.02, b: 0.05, a: 1}
+    - _AmbientSky: {r: 0.012, g: 0.014, b: 0.03, a: 1}
+    - _FogColor: {r: 0.085, g: 0.058, b: 0.16, a: 0}
+    - _GlowBlue: {r: 0.015, g: 0.04, b: 0.12, a: 0}
+    - _GlowMagenta: {r: 0.12, g: 0.025, b: 0.1, a: 0}
+    - _GlowOrange: {r: 0.13, g: 0.05, b: 0.018, a: 0}
+    - _GroundHaze: {r: 0.07, g: 0.045, b: 0.12, a: 0}
+    - _MidColor: {r: 0.045, g: 0.034, b: 0.1, a: 0}
+    - _SkyLightColor: {r: 0.10156863, g: 0.12352941, b: 0.21137255, a: 0.35}
+    - _SkyLightDir: {r: 0.5, g: 0.76, b: -0.43, a: 0}
+    - _ZenithColor: {r: 0.01, g: 0.011, b: 0.03, a: 0}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1

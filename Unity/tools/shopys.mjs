@@ -1,0 +1,21 @@
+// Probe: dump shop-only sorted ys (all buckets) for one front. args: lotId side
+import { LAYOUT } from '../../src/world/layout.js';
+import { buildPlan } from '../../src/systems/buildings/plan.js';
+import { buildLotArchitecture } from '../../src/systems/buildings/architecture.js';
+import { ChunkedBuckets } from '../../src/systems/buildings/geom.js';
+import { ShopBuilder } from '../../src/systems/buildings/shops.js';
+import { writeFileSync } from 'node:fs';
+const lotId = parseInt(process.argv[2]), side = process.argv[3];
+const { lots } = buildPlan(LAYOUT);
+const lot = lots.find(l => l.id === lotId);
+const B1 = new ChunkedBuckets(96);
+buildLotArchitecture(lot, B1, { colliders: [], lights: [], facades: [] });
+const B2 = new ChunkedBuckets(96);
+const shops = new ShopBuilder(B2, { colliders: [], lights: [], facades: [] });
+const f = lot.fronts.find(f => f.side === side && f.shop);
+shops.build(lot, f, {});
+const ys = [];
+for (const [, b] of B2.map.entries()) for (let i = 1; i < b.pos.length; i += 3) ys.push(b.pos[i]);
+ys.sort((a, b) => a - b);
+writeFileSync(`unity/Temp/js_shop_${lotId}_${side}.txt`, ys.map(v => v.toFixed(9)).join('\n'));
+console.log('js verts', ys.length);

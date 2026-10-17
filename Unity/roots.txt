@@ -1,0 +1,1 @@
+Ground=active=True scale=1 Skydome=active=True scale=2000 

@@ -1,0 +1,102 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: SurfSidewalk
+  m_Shader: {fileID: 4800000, guid: 2042fe87883ea4b47b4906ffe0a76aba, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _AlleyC:
+        m_Texture: {fileID: 2800000, guid: 9c70dc26e6e19344ab701f0eb8d2fbd1, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _AlleyN:
+        m_Texture: {fileID: 2800000, guid: a991cc9b1cb538142ae6d739f444735d, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _ConcreteC:
+        m_Texture: {fileID: 2800000, guid: b2fc84a5af0747941adc982019269126, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _ConcreteN:
+        m_Texture: {fileID: 2800000, guid: 27f472e441b195746ac8a23f9f6adf96, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _GraniteC:
+        m_Texture: {fileID: 2800000, guid: fe3f62ca729a1b24a8593184bb6a7656, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _GraniteN:
+        m_Texture: {fileID: 2800000, guid: c2e86db68e9de4b41a7cda2c31c14d0b, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _SidewalkC:
+        m_Texture: {fileID: 2800000, guid: d60f84b3ae026a04d9ee3698fa147e3b, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _SidewalkN:
+        m_Texture: {fileID: 2800000, guid: 2b637ead120e1e04195204cd466e44a2, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _StoneC:
+        m_Texture: {fileID: 2800000, guid: ba8b1706f5b965c45af05e72f4056834, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _StoneN:
+        m_Texture: {fileID: 2800000, guid: 767b64be30948194ea693da89c84f15c, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _TactDotsC:
+        m_Texture: {fileID: 2800000, guid: bb49422212fd42a42a4cecbe4c6ecbe0, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _TactDotsN:
+        m_Texture: {fileID: 2800000, guid: bfac4467a1451124eb8f09deda9226b6, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _TactLineC:
+        m_Texture: {fileID: 2800000, guid: 6e1ac335ffefbe543a2f44626790a79f, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _TactLineN:
+        m_Texture: {fileID: 2800000, guid: ef12166395ea5414bad1ddf456424af1, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: []
+    m_Floats:
+    - _Mode: 0
+    - _Rain: 1
+    - _SimTime: 0
+    - _SkyBrightness: 1
+    - _Wetness: 1
+    m_Colors:
+    - _AmbientGround: {r: 0.03, g: 0.02, b: 0.05, a: 1}
+    - _AmbientSky: {r: 0.012, g: 0.014, b: 0.03, a: 1}
+    - _FogColor: {r: 0.085, g: 0.058, b: 0.16, a: 0}
+    - _GlowBlue: {r: 0.015, g: 0.04, b: 0.12, a: 0}
+    - _GlowMagenta: {r: 0.12, g: 0.025, b: 0.1, a: 0}
+    - _GlowOrange: {r: 0.13, g: 0.05, b: 0.018, a: 0}
+    - _GroundHaze: {r: 0.07, g: 0.045, b: 0.12, a: 0}
+    - _MidColor: {r: 0.045, g: 0.034, b: 0.1, a: 0}
+    - _SkyLightColor: {r: 0.10156863, g: 0.12352941, b: 0.21137255, a: 0.35}
+    - _SkyLightDir: {r: 0.5, g: 0.76, b: -0.43, a: 0}
+    - _ZenithColor: {r: 0.01, g: 0.011, b: 0.03, a: 0}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1

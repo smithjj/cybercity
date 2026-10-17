@@ -1,0 +1,1 @@
+active=True enabled=True inCamVis=True matNull=False shader=NEON KAIDO/LanternPaper layer=0 camCullingMask=-1

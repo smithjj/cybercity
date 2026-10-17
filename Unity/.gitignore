@@ -1,0 +1,13 @@
+# Unity generated
+/Library/
+/Temp/
+/Obj/
+/Build/
+/Builds/
+/Logs/
+/UserSettings/
+/ProjectSettings/EditorUserSettings.asset
+/ProjectSettings/EditorBuildSettings.asset
+/MemoryCaptures/
+
+# keep generated scene out of sync? No — Main.unity is checked in (it is our bootstrap).

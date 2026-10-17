@@ -1,0 +1,1 @@
+LanternPaper=ERR LanternCaps=ERR LanternPlain=ERR 

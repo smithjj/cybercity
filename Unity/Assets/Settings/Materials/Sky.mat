@@ -1,0 +1,46 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: Sky
+  m_Shader: {fileID: 4800000, guid: aafa821faa9cbc84f847e2b0c24a2a61, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _NoiseTex:
+        m_Texture: {fileID: 2800000, guid: 4c43d144082a20d45848d09a1d822440, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: []
+    m_Floats:
+    - _CloudCover: 0.5
+    - _Lightning: 0
+    - _SkyBrightness: 1
+    m_Colors:
+    - _CloudOffset: {r: 0, g: 0, b: 0, a: 0}
+    - _FogColor: {r: 0.085, g: 0.058, b: 0.16, a: 0}
+    - _GlowBlue: {r: 0.015, g: 0.04, b: 0.12, a: 0}
+    - _GlowMagenta: {r: 0.12, g: 0.025, b: 0.1, a: 0}
+    - _GlowOrange: {r: 0.13, g: 0.05, b: 0.018, a: 0}
+    - _GroundHaze: {r: 0.07, g: 0.045, b: 0.12, a: 0}
+    - _LightningDir: {r: 0.29668093, g: 0.34612772, b: 0.89004266, a: 0}
+    - _MidColor: {r: 0.045, g: 0.034, b: 0.1, a: 0}
+    - _ZenithColor: {r: 0.01, g: 0.011, b: 0.03, a: 0}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1
