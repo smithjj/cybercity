@@ -1,1 +1,0 @@
-LanternPaper=OK LanternCaps=OK LanternPlain=OK 

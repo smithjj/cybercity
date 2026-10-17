@@ -1,1 +1,0 @@
-lantern_paper=236874 lantern_caps=7992 lantern_wires=2712 andon_paper=696 andon_frame=12528 

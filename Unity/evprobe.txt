@@ -1,1 +1,0 @@
-skyQ=2000 skyEnabled=True pos=(0.00, 0.00, 0.00)
