@@ -159,7 +159,7 @@ namespace NeonKaido
             else
             {
                 Yaw += Input.GetAxis("Mouse X") * 0.15f;   // +yaw turns right in Unity (Euler Y CW from above)
-                Pitch = Mathf.Clamp(Pitch + Input.GetAxis("Mouse Y") * 0.15f, -1.45f, 1.45f);
+                Pitch = Mathf.Clamp(Pitch - Input.GetAxis("Mouse Y") * 0.15f, -1.45f, 1.45f); // +Euler X pitches down, so subtract for look-up
                 _lookLag += Input.GetAxis("Mouse X") * 0.0021f;
             }
 
