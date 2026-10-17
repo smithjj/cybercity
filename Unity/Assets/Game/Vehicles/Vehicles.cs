@@ -33,6 +33,34 @@ namespace NeonKaido
             public Vector3 Point(float s) => p0 + dir * s;
         }
 
+        static bool _paintHealed;
+        // MaterialPropertyBlocks set at edit-time build don't survive scene saves —
+        // re-apply parked-vehicle paints on play (JS re-rolls paints per page load anyway)
+        static void HealParkedPaint()
+        {
+            if (_paintHealed) return;
+            _paintHealed = true;
+            foreach (var r in Object.FindObjectsByType<Renderer>(FindObjectsSortMode.None))
+            {
+                var nm = r.gameObject.name;
+                if (!nm.StartsWith("parked_")) continue;
+                var mpb = new MaterialPropertyBlock();
+                r.GetPropertyBlock(mpb);
+                if (mpb.GetVector("_PaintColor").magnitude > 0.01f) continue;
+                int u2 = nm.IndexOf('_', 7);
+                var type = u2 > 7 ? nm.Substring(7, u2 - 7) : nm.Substring(7);
+                Color paint;
+                if (type == "hero") paint = new Color(0x07 / 255f, 0x07 / 255f, 0x0a / 255f);
+                else if (Palette.TryGetValue(type, out var pal) && pal != null && pal.Length > 0)
+                    paint = pal[Mathf.Abs(nm.GetHashCode()) % pal.Length];
+                else continue;
+                mpb.SetColor("_PaintColor", paint);
+                mpb.SetFloat("_Spin", 0);
+                mpb.SetVector("_LightLv", Vector3.zero);
+                r.SetPropertyBlock(mpb);
+            }
+        }
+
         class Car
         {
             public string type; public Color paint; public GameObject go; public MaterialPropertyBlock mpb;
@@ -483,6 +511,7 @@ namespace NeonKaido
                 _linked = false;
             }
             if (!_linked || _cars.Count == 0 || _cars[0].go == null) { if (!TryLink()) return; }
+            HealParkedPaint();
             foreach (var lane in _lanes)
             {
                 var cars = lane.cars;
