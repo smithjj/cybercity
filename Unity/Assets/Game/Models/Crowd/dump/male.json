@@ -1,0 +1,686 @@
+{
+ "sex": "male",
+ "outfits": {
+  "m_raincoat": {
+   "sole": 0.025205587968230247,
+   "verts": 12502,
+   "tris": 23885,
+   "tags": [
+    "rain"
+   ],
+   "lod1_tris": 3343
+  },
+  "m_trench": {
+   "sole": 0.002895713783800602,
+   "verts": 14551,
+   "tris": 25992,
+   "tags": [
+    "rain"
+   ],
+   "lod1_tris": 3638
+  },
+  "m_techwear": {
+   "sole": 0.017432764172554016,
+   "verts": 11596,
+   "tris": 21682,
+   "tags": [
+    "tech"
+   ],
+   "lod1_tris": 3035
+  },
+  "m_hoodie": {
+   "sole": 0.017432764172554016,
+   "verts": 11109,
+   "tris": 21376,
+   "tags": [
+    "street"
+   ],
+   "lod1_tris": 2991
+  },
+  "m_suit": {
+   "sole": 0.002895713783800602,
+   "verts": 12242,
+   "tris": 23598,
+   "tags": [
+    "suit"
+   ],
+   "lod1_tris": 3303
+  },
+  "m_jacket": {
+   "sole": 0.017432764172554016,
+   "verts": 9243,
+   "tris": 17551,
+   "tags": [
+    "casual"
+   ],
+   "lod1_tris": 2457
+  }
+ },
+ "clips": {
+  "walk_slow": {
+   "period": 1.28,
+   "speed": 1.015625,
+   "frames": 38
+  },
+  "walk": {
+   "period": 1.1,
+   "speed": 1.3636363636363635,
+   "frames": 33
+  },
+  "walk_fast": {
+   "period": 0.98,
+   "speed": 1.7346938775510203,
+   "frames": 29
+  },
+  "umbrella_walk": {
+   "period": 1.28,
+   "speed": 1.015625,
+   "frames": 38
+  },
+  "phone_walk": {
+   "period": 1.3312000000000002,
+   "speed": 0.8984375,
+   "frames": 40
+  },
+  "idle": {
+   "period": 7.0,
+   "speed": 0,
+   "frames": 210
+  },
+  "idle_b": {
+   "period": 8.0,
+   "speed": 0,
+   "frames": 240
+  },
+  "phone_idle": {
+   "period": 6.0,
+   "speed": 0,
+   "frames": 180
+  },
+  "umbrella_idle": {
+   "period": 7.0,
+   "speed": 0,
+   "frames": 210
+  }
+ },
+ "textures": {
+  "brow": {
+   "map": "textures/crowd/eyebrow001.png"
+  },
+  "cloth_mjacket": {
+   "map": "textures/crowd/male_casualsuit05_diffuse.jpg",
+   "normal": "textures/crowd/male_casualsuit05_normal.jpg"
+  },
+  "cloth_mshirt": {
+   "map": "textures/crowd/male_casualsuit03_diffuse.jpg",
+   "normal": "textures/crowd/male_casualsuit03_normal.jpg"
+  },
+  "cloth_msuit": {
+   "map": "textures/crowd/male_elegantsuit01_diffuse.jpg"
+  },
+  "cloth_mtee": {
+   "map": "textures/crowd/male_casualsuit06_diffuse.jpg",
+   "normal": "textures/crowd/male_casualsuit06_normal.jpg"
+  },
+  "eyes": {
+   "map": "textures/crowd/brown_eye.jpg"
+  },
+  "hair_short01": {
+   "map": "textures/crowd/short01_diffuse.png"
+  },
+  "hair_short02": {
+   "map": "textures/crowd/short02_diffuse.png"
+  },
+  "hair_short03": {
+   "map": "textures/crowd/short03_diffuse.png"
+  },
+  "hair_short04": {
+   "map": "textures/crowd/short04_diffuse.png"
+  },
+  "lash": {
+   "map": "textures/crowd/eyelashes01.png"
+  },
+  "shoes_black": {
+   "map": "textures/crowd/shoes04_diffuse.jpg",
+   "normal": "textures/crowd/shoes04_normal.jpg"
+  },
+  "shoes_sneaker": {
+   "map": "textures/crowd/shoes02_diffuse.jpg"
+  },
+  "shoes_white": {
+   "map": "textures/crowd/shoes05_diffuse.jpg"
+  },
+  "skin": {
+   "map": "textures/crowd/young_lightskinned_male_diffuse3.jpg"
+  }
+ },
+ "materials": {
+  "boots_black": {
+   "color": [
+    0.019999999552965164,
+    0.017999999225139618,
+    0.017000000923871994,
+    1.0
+   ],
+   "roughness": 0.3499999940395355,
+   "metalness": 0.0,
+   "emissive": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "emissiveIntensity": 0.0,
+   "coat": 0.6000000238418579
+  },
+  "brow": {
+   "color": [
+    0.5,
+    0.5,
+    0.5,
+    1.0
+   ],
+   "roughness": 0.800000011920929,
+   "metalness": 0.0,
+   "emissive": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "emissiveIntensity": 0.0,
+   "coat": 0.0
+  },
+  "cloth_mjacket": {
+   "color": [
+    0.5,
+    0.5,
+    0.5,
+    1.0
+   ],
+   "roughness": 0.75,
+   "metalness": 0.0,
+   "emissive": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "emissiveIntensity": 0.0,
+   "coat": 0.0
+  },
+  "cloth_mshirt": {
+   "color": [
+    0.5,
+    0.5,
+    0.5,
+    1.0
+   ],
+   "roughness": 0.75,
+   "metalness": 0.0,
+   "emissive": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "emissiveIntensity": 0.0,
+   "coat": 0.0
+  },
+  "cloth_msuit": {
+   "color": [
+    0.5,
+    0.5,
+    0.5,
+    1.0
+   ],
+   "roughness": 0.75,
+   "metalness": 0.0,
+   "emissive": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "emissiveIntensity": 0.0,
+   "coat": 0.0
+  },
+  "cloth_mtee": {
+   "color": [
+    0.5,
+    0.5,
+    0.5,
+    1.0
+   ],
+   "roughness": 0.75,
+   "metalness": 0.0,
+   "emissive": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "emissiveIntensity": 0.0,
+   "coat": 0.0
+  },
+  "eyes": {
+   "color": [
+    0.5,
+    0.5,
+    0.5,
+    1.0
+   ],
+   "roughness": 0.10000000149011612,
+   "metalness": 0.0,
+   "emissive": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "emissiveIntensity": 0.0,
+   "coat": 0.0
+  },
+  "hair_short01": {
+   "color": [
+    0.1599999964237213,
+    0.12999999523162842,
+    0.11999999731779099,
+    1.0
+   ],
+   "roughness": 0.75,
+   "metalness": 0.0,
+   "emissive": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "emissiveIntensity": 0.0,
+   "coat": 0.0
+  },
+  "hair_short02": {
+   "color": [
+    0.1599999964237213,
+    0.12999999523162842,
+    0.11999999731779099,
+    1.0
+   ],
+   "roughness": 0.75,
+   "metalness": 0.0,
+   "emissive": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "emissiveIntensity": 0.0,
+   "coat": 0.0
+  },
+  "hair_short03": {
+   "color": [
+    0.1599999964237213,
+    0.12999999523162842,
+    0.11999999731779099,
+    1.0
+   ],
+   "roughness": 0.75,
+   "metalness": 0.0,
+   "emissive": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "emissiveIntensity": 0.0,
+   "coat": 0.0
+  },
+  "hair_short04": {
+   "color": [
+    0.1599999964237213,
+    0.12999999523162842,
+    0.11999999731779099,
+    1.0
+   ],
+   "roughness": 0.75,
+   "metalness": 0.0,
+   "emissive": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "emissiveIntensity": 0.0,
+   "coat": 0.0
+  },
+  "knit_charcoal": {
+   "color": [
+    0.07000000029802322,
+    0.07000000029802322,
+    0.07500000298023224,
+    1.0
+   ],
+   "roughness": 0.8500000238418579,
+   "metalness": 0.0,
+   "emissive": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "emissiveIntensity": 0.0,
+   "coat": 0.0
+  },
+  "lash": {
+   "color": [
+    0.5,
+    0.5,
+    0.5,
+    1.0
+   ],
+   "roughness": 0.800000011920929,
+   "metalness": 0.0,
+   "emissive": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "emissiveIntensity": 0.0,
+   "coat": 0.0
+  },
+  "phone_body": {
+   "color": [
+    0.019999999552965164,
+    0.019999999552965164,
+    0.02500000037252903,
+    1.0
+   ],
+   "roughness": 0.30000001192092896,
+   "metalness": 0.6000000238418579,
+   "emissive": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "emissiveIntensity": 0.0,
+   "coat": 0.0
+  },
+  "phone_screen": {
+   "color": [
+    0.019999999552965164,
+    0.019999999552965164,
+    0.019999999552965164,
+    1.0
+   ],
+   "roughness": 0.10000000149011612,
+   "metalness": 0.0,
+   "emissive": [
+    0.550000011920929,
+    0.75,
+    1.0
+   ],
+   "emissiveIntensity": 1.2000000476837158,
+   "coat": 0.0
+  },
+  "rain_black": {
+   "color": [
+    0.017999999225139618,
+    0.017999999225139618,
+    0.019999999552965164,
+    1.0
+   ],
+   "roughness": 0.2199999988079071,
+   "metalness": 0.0,
+   "emissive": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "emissiveIntensity": 0.0,
+   "coat": 1.0
+  },
+  "shoes_black": {
+   "color": [
+    0.5,
+    0.5,
+    0.5,
+    1.0
+   ],
+   "roughness": 0.75,
+   "metalness": 0.0,
+   "emissive": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "emissiveIntensity": 0.0,
+   "coat": 0.0
+  },
+  "shoes_sneaker": {
+   "color": [
+    0.5,
+    0.5,
+    0.5,
+    1.0
+   ],
+   "roughness": 0.75,
+   "metalness": 0.0,
+   "emissive": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "emissiveIntensity": 0.0,
+   "coat": 0.0
+  },
+  "shoes_white": {
+   "color": [
+    0.5,
+    0.5,
+    0.5,
+    1.0
+   ],
+   "roughness": 0.75,
+   "metalness": 0.0,
+   "emissive": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "emissiveIntensity": 0.0,
+   "coat": 0.0
+  },
+  "skin": {
+   "color": [
+    0.5,
+    0.5,
+    0.5,
+    1.0
+   ],
+   "roughness": 0.47999998927116394,
+   "metalness": 0.0,
+   "emissive": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "emissiveIntensity": 0.0,
+   "coat": 0.0
+  },
+  "sole": {
+   "color": [
+    0.014999999664723873,
+    0.014999999664723873,
+    0.014999999664723873,
+    1.0
+   ],
+   "roughness": 0.699999988079071,
+   "metalness": 0.0,
+   "emissive": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "emissiveIntensity": 0.0,
+   "coat": 0.0
+  },
+  "tech_black": {
+   "color": [
+    0.029999999329447746,
+    0.03200000151991844,
+    0.035999998450279236,
+    1.0
+   ],
+   "roughness": 0.550000011920929,
+   "metalness": 0.0,
+   "emissive": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "emissiveIntensity": 0.0,
+   "coat": 0.0
+  },
+  "trench_tan": {
+   "color": [
+    0.30000001192092896,
+    0.25,
+    0.17000000178813934,
+    1.0
+   ],
+   "roughness": 0.6000000238418579,
+   "metalness": 0.0,
+   "emissive": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "emissiveIntensity": 0.0,
+   "coat": 0.0
+  },
+  "trench_tan_belt": {
+   "color": [
+    0.019999999552965164,
+    0.017999999225139618,
+    0.014999999664723873,
+    1.0
+   ],
+   "roughness": 0.4000000059604645,
+   "metalness": 0.0,
+   "emissive": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "emissiveIntensity": 0.0,
+   "coat": 0.0
+  },
+  "trim_cyan": {
+   "color": [
+    0.10000000149011612,
+    0.8999999761581421,
+    1.0,
+    1.0
+   ],
+   "roughness": 0.30000001192092896,
+   "metalness": 0.0,
+   "emissive": [
+    0.10000000149011612,
+    0.8999999761581421,
+    1.0
+   ],
+   "emissiveIntensity": 6.0,
+   "coat": 0.0
+  },
+  "umb_black": {
+   "color": [
+    0.012000000104308128,
+    0.012000000104308128,
+    0.014000000432133675,
+    1.0
+   ],
+   "roughness": 0.3499999940395355,
+   "metalness": 0.0,
+   "emissive": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "emissiveIntensity": 0.0,
+   "coat": 1.0
+  },
+  "umb_clear": {
+   "color": [
+    0.8500000238418579,
+    0.8999999761581421,
+    0.949999988079071,
+    1.0
+   ],
+   "roughness": 0.05000000074505806,
+   "metalness": 0.0,
+   "emissive": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "emissiveIntensity": 0.0,
+   "coat": 0.0
+  },
+  "umb_handle": {
+   "color": [
+    0.019999999552965164,
+    0.019999999552965164,
+    0.019999999552965164,
+    1.0
+   ],
+   "roughness": 0.4000000059604645,
+   "metalness": 0.0,
+   "emissive": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "emissiveIntensity": 0.0,
+   "coat": 0.0
+  },
+  "umb_led": {
+   "color": [
+    0.10000000149011612,
+    0.8999999761581421,
+    1.0,
+    1.0
+   ],
+   "roughness": 0.30000001192092896,
+   "metalness": 0.0,
+   "emissive": [
+    0.10000000149011612,
+    0.8999999761581421,
+    1.0
+   ],
+   "emissiveIntensity": 8.0,
+   "coat": 0.0
+  },
+  "umb_ledcanopy": {
+   "color": [
+    0.029999999329447746,
+    0.03500000014901161,
+    0.05000000074505806,
+    1.0
+   ],
+   "roughness": 0.11999999731779099,
+   "metalness": 0.0,
+   "emissive": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "emissiveIntensity": 0.0,
+   "coat": 1.0
+  },
+  "umb_metal": {
+   "color": [
+    0.6000000238418579,
+    0.6000000238418579,
+    0.6200000047683716,
+    1.0
+   ],
+   "roughness": 0.25,
+   "metalness": 1.0,
+   "emissive": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "emissiveIntensity": 0.0,
+   "coat": 0.0
+  }
+ }
+}

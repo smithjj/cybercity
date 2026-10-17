@@ -9,6 +9,11 @@ namespace NeonKaido
         float _yaw, _pitch;
         bool _locked;
 
+        public void Teleport(float x, float y, float z)
+        {
+            transform.position = new Vector3(x, y, z);
+        }
+
         void Start()
         {
             // street-view start (sim 1.5, 30 -> unity z=-30), eye 1.7, facing north (down -z)
@@ -57,6 +62,11 @@ namespace NeonKaido
         {
             Shader.SetGlobalFloat("_SimTime", (float)(Time.timeSinceLevelLoadAsDouble % 3600.0));
             NeonKaido.Atmo.PushGlobals();
+            NeonKaido.VehicleTraffic.Update(Time.deltaTime, (float)(Time.timeSinceLevelLoadAsDouble % 3600.0), transform.position);
+            NeonKaido.WeatherDriver.Update(Time.deltaTime, (float)(Time.timeSinceLevelLoadAsDouble % 3600.0), transform.position);
+            NeonKaido.Crowd.Update(Time.deltaTime, (float)(Time.timeSinceLevelLoadAsDouble % 3600.0), transform.position);
+            NeonKaido.Gameplay.Update(Time.deltaTime, (float)(Time.timeSinceLevelLoadAsDouble % 3600.0), transform.position);
+            if (Input.GetKeyDown(KeyCode.F)) NeonKaido.Gameplay.TakeLift();
             NeonKaido.TrafficSignals.Update((float)(Time.timeSinceLevelLoadAsDouble % 3600.0));
             NeonKaido.Koi.Update(Time.timeSinceLevelLoadAsDouble % 3600.0);
             NeonKaido.Trains.Update(Time.timeSinceLevelLoadAsDouble % 3600.0);
@@ -103,6 +113,11 @@ namespace NeonKaido
             if (Input.GetKey(KeyCode.C)) pos -= Vector3.up * sp;
             if (pos.y < 0.4f) pos.y = 0.4f;
             transform.position = pos;
+        }
+
+        void OnGUI()
+        {
+            NeonKaido.GameplayHud.Draw(NeonKaido.Gameplay.Gigs, transform.position);
         }
 
         void OnApplicationFocus(bool focus)

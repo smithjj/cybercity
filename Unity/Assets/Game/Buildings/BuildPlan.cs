@@ -117,6 +117,9 @@ namespace NeonKaido
 
         static double Hyp(double a, double b) => GroundGeo.Hypot2(a, b);
 
+        /// Cached lots from the last Run() (weather heightfield bake reads these).
+        public static List<BLot> Lots => _lots;
+
         public static List<BLot> Run()
         {
             _rng = new BuildingsRng(0xC17E);

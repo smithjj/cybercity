@@ -255,6 +255,35 @@ namespace NeonKaido.EditorTools
         public static bool AsyncBusy = false;
 
         /// Run a slow build off the eval timeout: kick off, then poll AsyncResult.
+        public static string BuildVehicles()
+        {
+            var root = GameObject.Find("VehiclesRoot");
+            if (root == null) root = new GameObject("VehiclesRoot");
+            return VehicleTraffic.Build(root.transform);
+        }
+
+        public static string BuildWeather()
+        {
+            var root = GameObject.Find("CityRoot");
+            if (root == null) root = GameObject.Find("VehiclesRoot")?.transform.parent?.gameObject;
+            return NeonKaido.WeatherDriver.Build(root != null ? root.transform : null);
+        }
+
+        public static string BuildCrowd()
+        {
+            var root = GameObject.Find("CityRoot");
+            if (root == null) root = GameObject.Find("VehiclesRoot")?.transform.parent?.gameObject;
+            return NeonKaido.Crowd.Build(root != null ? root.transform : null);
+        }
+
+        public static string BuildGameplay()
+        {
+            var root = GameObject.Find("CityRoot");
+            if (root == null) root = GameObject.Find("VehiclesRoot")?.transform.parent?.gameObject;
+            NeonKaido.Gameplay.Build(root != null ? root.transform : null);
+            return NeonKaido.Gameplay.Describe();
+        }
+
         public static string RunAsync(string which)
         {
             System.Func<string> f = which == "buildings" ? (System.Func<string>)BuildBuildings
@@ -262,7 +291,11 @@ namespace NeonKaido.EditorTools
                 : which == "atmosphere" ? () => BuildAtmosphere()
                 : which == "ground" ? () => BuildGround()
                 : which == "signage" ? () => BuildSignage()
-                : which == "all" ? () => BuildAtmosphere() + " | " + BuildGround() + " | " + BuildSignage() + " | " + BuildLandmarks()
+                : which == "vehicles" ? () => BuildVehicles()
+                : which == "weather" ? () => BuildWeather()
+                : which == "crowd" ? () => BuildCrowd()
+                : which == "gameplay" ? () => BuildGameplay()
+                : which == "all" ? () => BuildAtmosphere() + " | " + BuildGround() + " | " + BuildSignage() + " | " + BuildLandmarks() + " | " + BuildVehicles() + " | " + BuildWeather() + " | " + BuildCrowd() + " | " + BuildGameplay()
                 : () => "unknown async target";
             if (AsyncBusy) return "busy: " + AsyncResult;
             AsyncBusy = true;
@@ -567,7 +600,12 @@ namespace NeonKaido.EditorTools
             if (oldS != null) UnityEngine.Object.DestroyImmediate(oldS);
             var rootS = new GameObject("LandmarksSkyline");
             var sky = NeonKaido.Skyline.Build(rootS.transform);
-            return r + " | " + rail + " | " + trains + " | " + exp + " | " + cherry + " | " + props + " | " + bridge + " | " + sky;
+
+            var rootV = GameObject.Find("VehiclesRoot");
+            if (rootV != null) UnityEngine.Object.DestroyImmediate(rootV);
+            var rootVeh = new GameObject("VehiclesRoot");
+            var veh = NeonKaido.VehicleTraffic.Build(rootVeh.transform);
+            return r + " | " + rail + " | " + trains + " | " + exp + " | " + cherry + " | " + props + " | " + bridge + " | " + sky + " | " + veh;
         }
 
         static Texture2D SignTex(string path, bool srgb)
@@ -1127,3 +1165,77 @@ namespace NeonKaido.EditorTools
 // t
 
 // t
+
+// t
+
+// t
+
+// t
+
+// t
+
+// t
+
+// t
+
+// t
+
+// t
+
+// t
+
+// wx
+
+// wx2
+
+// wx3
+
+// wx4
+
+// wx5
+
+// wx6
+
+// cr
+
+// cr2
+
+// cr3
+
+// cr4
+
+// cr5
+
+// cr6
+
+// cr7
+
+// cr8
+
+// cr9
+
+// cr10
+
+// cr11
+
+// cr12
+
+// cr13
+
+// cr14
+
+// gp1
+
+// gp2
+
+// gp3
+
+// gp4
+
+// gp5
+
+// gp6
+
+// gp7
+
+// gp8
