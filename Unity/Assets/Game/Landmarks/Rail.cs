@@ -35,12 +35,13 @@ namespace NeonKaido
             var wireMat = LmMats.Metal(new Color(0.08f, 0.08f, 0.08f), 0.4f, 0.6f);
             var insul = LmMats.Metal(new Color(0.45f, 0.3f, 0.2f), 0.25f, 0f);
             var ledCool = LmMats.Emissive(new Color(0.8f, 0.9f, 1f), 9);
+            var ledWarm = LmMats.Emissive(new Color(1f, 0.84f, 0.6f), 5);   // continuous parapet edge strips
             var ledAccent = LmMats.Emissive(new Color(1f, 0.82f, 0.6f), 3);
             var mats = new (string key, Material m)[]
             {
                 ("concrete", concrete), ("concreteDark", concreteDark), ("slab", slab),
                 ("rail", railMat), ("darkMetal", darkMetal), ("steel", steel),
-                ("wire", wireMat), ("insul", insul), ("ledCool", ledCool), ("ledAccent", ledAccent),
+                ("wire", wireMat), ("insul", insul), ("ledCool", ledCool), ("ledAccent", ledAccent), ("ledWarm", ledWarm),
             };
             foreach (var (key, m) in mats) if (m == null) return "rail: material missing (" + key + ")";
 
@@ -60,7 +61,11 @@ namespace NeonKaido
                 foreach (var s in new[] { -1f, 1f })
                 {
                     b.Box("concrete", 40f - 0.06f, 1.25f, 0.24f, x + 20f, H + 0.62f, Zl + s * (halfW - 0.12f));
-                    b.Box("concreteDark", 40f - 0.06f, 0.1f, 0.4f, x + 20f, H + 1.27f, Zl + s * (halfW - 0.1f));
+                    b.Box("darkMetal", 40f - 0.06f, 0.1f, 0.4f, x + 20f, H + 1.27f, Zl + s * (halfW - 0.1f));
+                    // legibility edge strips: continuous warm light along BOTH parapet tops so the
+                    // overpass reads as structure from the street (fog darkens the deck face)
+                    b.Box("ledWarm", 40f - 0.06f, 0.05f, 0.05f, x + 20f, H + 1.33f, Zl + s * (halfW - 0.02f));
+                    b.Box("ledWarm", 40f - 0.06f, 0.05f, 0.05f, x + 20f, H - 2.62f, Zl + s * (halfW - 0.02f));
                     b.Box("concreteDark", 40f - 0.06f, 0.32f, 0.12f, x + 20f, H - 0.2f, Zl + s * (halfW + 0.05f));
                     b.Box("concreteDark", 40f - 0.06f, 0.35f, 0.5f, x + 20f, H + 0.17f, Zl + s * (halfW - 0.55f));
                 }
@@ -108,7 +113,7 @@ namespace NeonKaido
             for (float x = x0 + 5f; x < x1; x += 10f)
             {
                 foreach (var s in new[] { -1.5f, 1.5f })
-                    b.Box("ledCool", 1.6f, 0.06f, 0.18f, x, H - 2.53f, Zl + s);
+                    b.Box("ledCool", 3.2f, 0.06f, 0.18f, x, H - 2.53f, Zl + s);
                 b.Box("darkMetal", 1.8f, 0.1f, 0.3f, x, H - 2.47f, Zl - 1.5f);
                 b.Box("darkMetal", 1.8f, 0.1f, 0.3f, x, H - 2.47f, Zl + 1.5f);
             }
