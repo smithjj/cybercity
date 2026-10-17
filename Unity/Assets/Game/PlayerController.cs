@@ -20,6 +20,7 @@ namespace NeonKaido
 
         CharacterController _cc;
         Transform _eye;
+        bool _eyeIsRoot;   // NKCamera hosts the camera on the player root itself
         public bool WalkMode = true;
         bool _locked;
 
@@ -54,14 +55,17 @@ namespace NeonKaido
                 cam = go.AddComponent<Camera>();
                 cam.nearClipPlane = 0.05f;
                 cam.fieldOfView = 75f;
-                var al = go.AddComponent<AudioListener>(); // move listener to the eye
             }
-            _eye = cam.transform;
-            // other cameras off
-            foreach (var c in Object.FindObjectsByType<Camera>(FindObjectsSortMode.None)) if (c != cam) c.enabled = false;
-            foreach (var l in Object.FindObjectsByType<AudioListener>(FindObjectsSortMode.None)) if (l != cam) l.enabled = false;
+            // exactly one enabled AudioListener: on the eye camera (warning spam otherwise)
+            if (cam.GetComponent<AudioListener>() == null) cam.gameObject.AddComponent<AudioListener>();
+            foreach (var l in Object.FindObjectsByType<AudioListener>(FindObjectsSortMode.None)) l.enabled = (l.transform == cam.transform);
             var rootGO = GameObject.Find("/AudioRoot");
             if (rootGO != null) foreach (var l in rootGO.GetComponentsInChildren<AudioListener>()) l.enabled = false;
+            _eye = cam.transform;
+            _eyeIsRoot = _eye == transform;
+            if (_eyeIsRoot) SetCapsule(HStand); // capsule hangs below the eye (feet at eye − 1.66)
+            // other cameras off
+            foreach (var c in Object.FindObjectsByType<Camera>(FindObjectsSortMode.None)) if (c != cam) c.enabled = false;
         }
 
         void Start()
@@ -112,7 +116,7 @@ namespace NeonKaido
             float gy = y;
             if (Physics.Raycast(new Vector3(x, y + 2f, z), Vector3.down, out var hit, 60f))
                 gy = y + 2f - hit.distance;
-            transform.position = new Vector3(x, Mathf.Max(0.05f, gy + 0.05f), z);
+            transform.position = new Vector3(x, Mathf.Max(0.05f, gy + 0.05f) + (_eyeIsRoot ? EyeStand : 0f), z);
             _camY = transform.position.y;
             _vel = Vector3.zero; _vy = 0;
             if (yaw.HasValue) Yaw = yaw.Value;
@@ -131,15 +135,15 @@ namespace NeonKaido
             if (Input.GetKeyDown(KeyCode.F)) NeonKaido.Gameplay.TakeLift();
             NeonKaido.Soundscape.Update(Time.deltaTime, td);
             if (Input.GetKeyDown(KeyCode.M)) NeonKaido.Soundscape.ToggleMusic();
-            NeonKaido.TrafficSignals.Update(t);
-            NeonKaido.Koi.Update(td);
-            NeonKaido.Trains.Update(td);
             for (int i = 0; i < NeonKaido.FacadeSigns.FlickerL.Count; i++)
             {
                 var l = NeonKaido.FacadeSigns.FlickerL[i];
                 if (l == null) continue;
                 l.intensity = NeonKaido.FacadeSigns.FlickerBase[i] * NeonKaido.FacadeSigns.Flicker(NeonKaido.FacadeSigns.FlickerSeed[i], NeonKaido.FacadeSigns.FlickerType[i], 0, t);
             }
+            NeonKaido.TrafficSignals.Update(t);
+            NeonKaido.Koi.Update(td);
+            NeonKaido.Trains.Update(td);
 
             if (Input.GetKeyDown(KeyCode.V)) { WalkMode = !WalkMode; _locked = false; }
 
@@ -147,16 +151,17 @@ namespace NeonKaido
             if (Input.GetKeyDown(KeyCode.Escape) && _locked)
             {
                 Cursor.lockState = CursorLockMode.None; Cursor.visible = true; _locked = false;
-                return;
             }
             if (!_locked)
             {
                 if (Input.GetMouseButtonDown(0)) { Cursor.lockState = CursorLockMode.Locked; Cursor.visible = false; _locked = true; }
-                return;
             }
-            Yaw -= Input.GetAxis("Mouse X") * 0.15f;
-            Pitch = Mathf.Clamp(Pitch - Input.GetAxis("Mouse Y") * 0.15f, -1.45f, 1.45f);
-            _lookLag += Input.GetAxis("Mouse X") * 0.0021f;
+            else
+            {
+                Yaw += Input.GetAxis("Mouse X") * 0.15f;   // +yaw turns right in Unity (Euler Y CW from above)
+                Pitch = Mathf.Clamp(Pitch + Input.GetAxis("Mouse Y") * 0.15f, -1.45f, 1.45f);
+                _lookLag += Input.GetAxis("Mouse X") * 0.0021f;
+            }
 
             float dt = Mathf.Min(Time.deltaTime, 0.05f);
             if (WalkMode) StepWalk(dt, t);
@@ -179,8 +184,7 @@ namespace NeonKaido
             if (pos.y < 0.4f) pos.y = 0.4f;
             transform.position = pos;
             transform.rotation = Quaternion.Euler(Pitch * Mathf.Rad2Deg, Yaw * Mathf.Rad2Deg, 0f);
-            _eye.localPosition = Vector3.zero;
-            _eye.localRotation = Quaternion.identity;
+            if (!_eyeIsRoot) { _eye.localPosition = Vector3.zero; _eye.localRotation = Quaternion.identity; }
         }
 
         void StepWalk(float dt, float t)
@@ -274,13 +278,24 @@ namespace NeonKaido
             float breathe = Mathf.Sin(t * 1.3f) * 0.004f;
             float idlePitch = (Mathf.Sin(t * 0.9f) * 0.0035f + Mathf.Sin(t * 0.37f) * 0.002f);
             float idleYaw = Mathf.Sin(t * 0.53f) * 0.0025f;
-            _eye.localPosition = new Vector3(cy * bobX, eye + bobY + breathe + _dip * 0.09f, -sy * bobX);
-            _eye.localRotation = Quaternion.Euler(
-                (Pitch + idlePitch + _dip * 0.035f - Mathf.Abs(Mathf.Sin(_bobPhase)) * 0.004f * _bobAmp) * Mathf.Rad2Deg,
-                (Yaw + idleYaw) * Mathf.Rad2Deg,
-                (_roll + Mathf.Cos(_bobPhase) * 0.004f * _bobAmp) * Mathf.Rad2Deg);
-            // root yaw only (CC moves in world space; pitch/roll live on the eye)
-            transform.rotation = Quaternion.Euler(0, Yaw * Mathf.Rad2Deg, 0);
+            if (_eyeIsRoot)
+            {
+                // camera lives on the root: one combined rotation write (CC owns position)
+                transform.rotation = Quaternion.Euler(
+                    (Pitch + idlePitch + _dip * 0.035f - Mathf.Abs(Mathf.Sin(_bobPhase)) * 0.004f * _bobAmp) * Mathf.Rad2Deg,
+                    (Yaw + idleYaw) * Mathf.Rad2Deg,
+                    (_roll + Mathf.Cos(_bobPhase) * 0.004f * _bobAmp) * Mathf.Rad2Deg);
+            }
+            else
+            {
+                _eye.localPosition = new Vector3(cy * bobX, eye + bobY + breathe + _dip * 0.09f, -sy * bobX);
+                _eye.localRotation = Quaternion.Euler(
+                    (Pitch + idlePitch + _dip * 0.035f - Mathf.Abs(Mathf.Sin(_bobPhase)) * 0.004f * _bobAmp) * Mathf.Rad2Deg,
+                    idleYaw * Mathf.Rad2Deg, // root already carries Yaw — eye must not double it
+                    (_roll + Mathf.Cos(_bobPhase) * 0.004f * _bobAmp) * Mathf.Rad2Deg);
+                // root yaw only (CC moves in world space; pitch/roll live on the eye)
+                transform.rotation = Quaternion.Euler(0, Yaw * Mathf.Rad2Deg, 0);
+            }
 
             float fovT = 75f + _sprintK * 8f + (_grounded ? 0f : 2f);
             _fov = Damp(_fov, fovT, 6, dt);
@@ -291,7 +306,8 @@ namespace NeonKaido
         void SetCapsule(float h)
         {
             _cc.height = h;
-            _cc.center = new Vector3(0, h * 0.5f, 0);
+            // eye==root: capsule bottom stays glued to the feet (root − eyeH) as it squashes
+            _cc.center = new Vector3(0, h * 0.5f - (_eyeIsRoot ? Mathf.Lerp(EyeStand, EyeCrouch, _crouchK) : 0f), 0);
         }
 
         bool HasHeadroom()

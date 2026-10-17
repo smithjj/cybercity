@@ -153,6 +153,8 @@ namespace NeonKaido.EditorTools
 
         static void WalkTick()
         {
+            // legacy spectator rig — never fight the real PlayerController in play mode
+            if (Application.isPlaying) return;
             var cam = Camera.main;
             if (!_walk || cam == null) { WalkStop(); return; }
             if (Input.GetKeyDown(KeyCode.Escape)) { WalkStop(); return; }
@@ -1344,3 +1346,11 @@ namespace NeonKaido.EditorTools
 // wk1
 
 // wk2
+
+// fx1
+
+// fx2
+
+// fx3
+
+// fx4

@@ -706,6 +706,21 @@ namespace NeonKaido
                         }
                     }
                 double pref = (ag.dir > 0 ? -0.35 : 0.35) * ln.hw;
+                // player avoidance (Unity add-on): steer around and yield to the walking player
+                var pc = NeonKaido.PlayerController.I;
+                if (pc != null && pc.WalkMode)
+                {
+                    var ppos = pc.transform.position;
+                    double pdx = ppos.x - ag.x, pdz = (-ppos.z) - ag.z;
+                    double pahead = pdx * fx + pdz * fz;
+                    if (pahead > -0.3 && pahead < 2.6 && pdx * pdx + pdz * pdz < 7.3)
+                    {
+                        double pside = pdx * fz - pdz * fx;
+                        double purg = 1 - Math.Max(0, pahead) / 2.6;
+                        steer += (pside >= 0 ? -1 : 1) * purg * 1.35;
+                        if (pahead < 1.2) v *= 0.7;
+                    }
+                }
                 steer += (pref - ag.lat) * 0.12;
                 double latVel = Math.Max(-0.6, Math.Min(0.6, steer)) * ag.dir * -1;
                 ag.lat = Math.Max(-ln.hw, Math.Min(ln.hw, ag.lat + latVel * dt * 0.8));
