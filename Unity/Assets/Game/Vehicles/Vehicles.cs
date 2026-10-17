@@ -551,7 +551,13 @@ namespace NeonKaido
                     float acc = a * (1 - Mathf.Pow(c.v / c.v0, 4) - Mathf.Pow(sStar / Mathf.Max(gap, 0.01f), 2));
                     acc = Mathf.Max(acc, -9f);
                     c.v = Mathf.Max(0, c.v + acc * dt);
+                    float prevS = c.s;
                     c.s += c.v * dt;
+                    // hard guard: never drive through the player (adjacent-lane passes read as flickering ghosts)
+                    var wp = c.lane.Point(c.s);
+                    var wu = new Vector3((float)wp.x, playerPos.y, (float)-wp.z);
+                    var dh = wu - playerPos; dh.y = 0;
+                    if (dh.sqrMagnitude < 4.8f) { c.s = prevS; c.v = 0f; c.brake = 1f; }
                     c.brake = acc < -0.8f || c.v < 0.3f ? 1f : 0f;
                     if (c.s > lane.len) c.s -= lane.len;
                     float wr = _models[c.type].mf.wheelRadius;
