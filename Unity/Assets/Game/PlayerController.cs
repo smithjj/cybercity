@@ -53,9 +53,12 @@ namespace NeonKaido
                 var go = new GameObject("Eye");
                 go.transform.SetParent(transform, false);
                 cam = go.AddComponent<Camera>();
-                cam.nearClipPlane = 0.05f;
-                cam.fieldOfView = 75f;
             }
+            // tight depth range: near 0.1/far 4000 starved the 24-bit depth buffer and z-fighted
+            // distant geometry (train underframe/body seam flicker). sky dome is 1000-radius.
+            cam.nearClipPlane = 0.15f;
+            cam.farClipPlane = 2000f;
+            cam.fieldOfView = 75f;
             // exactly one enabled AudioListener: on the eye camera (warning spam otherwise)
             if (cam.GetComponent<AudioListener>() == null) cam.gameObject.AddComponent<AudioListener>();
             foreach (var l in Object.FindObjectsByType<AudioListener>(FindObjectsSortMode.None)) l.enabled = (l.transform == cam.transform);
