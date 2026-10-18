@@ -176,8 +176,16 @@ namespace NeonKaido
         }
 
         // ---------------------------------------------------------------- build
-        public static string Build(Transform root)
+        static bool _modelsLoaded;
+        public static bool ModelsReady => _models != null && _modelsLoaded;
+
+        /// Load the five dumped car meshes + manifests without building any traffic.
+        /// Returns null on success, an error string otherwise. The gallery uses this
+        /// independently of Build so the showroom can exist without parked/traffic cars.
+        /// Retries a partially loaded set on the next call (a missing dump is not cached as success).
+        public static string LoadModels()
         {
+            if (_modelsLoaded) return null;
             if (_models == null)
             {
                 _models = new Dictionary<string, (Mesh, Mesh, Manifest)>();
@@ -195,6 +203,43 @@ namespace NeonKaido
                 var mf = JsonUtility.FromJson<Manifest>(System.IO.File.ReadAllText($"{dir}/veh_{type}.json"));
                 _models[type] = (LoadCar(type, ""), LoadCar(type, "_l3"), mf);
             }
+            _modelsLoaded = true;
+            return null;
+        }
+
+        /// Per-type paint list (index.js `pal` tables) for the gallery's colour cycling.
+        public static Color[] PaletteFor(string type) =>
+            Palette.TryGetValue(type, out var p) && p != null && p.Length > 0 ? p : new[] { Color.white };
+
+        /// One display-only car (no collider, not in the traffic/parked lists).
+        public static GameObject SpawnShowcase(Transform parent, string type, Vector3 pos, float yawDeg, Color paint, Vector3 lights)
+        {
+            if (!ModelsReady) LoadModels();
+            if (!ModelsReady || !_models.ContainsKey(type)) return null;
+            var go = SpawnCar(parent, type, "", "gallery_" + type);
+            go.transform.SetPositionAndRotation(pos, Quaternion.Euler(0f, yawDeg, 0f));
+            go.transform.localScale = Vector3.one;
+            var mpb = new MaterialPropertyBlock();
+            mpb.SetColor("_PaintColor", paint);
+            mpb.SetFloat("_Spin", 0f);
+            mpb.SetVector("_LightLv", lights);
+            go.GetComponent<MeshRenderer>().SetPropertyBlock(mpb);
+            return go;
+        }
+
+        /// Clear the fake per-car point-light globals (traffic lights) while the gallery hides traffic.
+        public static void ClearCarLightGlobals()
+        {
+            var zero = new Vector4[42];
+            Shader.SetGlobalFloat("_CarLCount", 0f);
+            Shader.SetGlobalVectorArray("_CarLPos", zero);
+            Shader.SetGlobalVectorArray("_CarLColor", zero);
+        }
+
+        public static string Build(Transform root)
+        {
+            var err = LoadModels();
+            if (err != null) return err;
 
             if (root.Find("Vehicles") != null) Object.DestroyImmediate(root.Find("Vehicles").gameObject);
             var vroot = new GameObject("Vehicles");

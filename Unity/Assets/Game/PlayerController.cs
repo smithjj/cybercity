@@ -81,6 +81,27 @@ namespace NeonKaido
 
         public void Teleport(float x, float y, float z) { PlaceAt(x, y, z, null); }
 
+        // --- car gallery: the showroom drives the camera through these (no player movement while open)
+        public void ReleaseCursor()
+        {
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+            _locked = false;
+        }
+
+        public void SetGalleryPose(Vector3 pos, Quaternion rot)
+        {
+            transform.SetPositionAndRotation(pos, rot);
+            if (!_eyeIsRoot) { _eye.localPosition = Vector3.zero; _eye.localRotation = Quaternion.identity; }
+        }
+
+        public void RestorePose(Vector3 pos, float yaw, float pitch)
+        {
+            Yaw = yaw; Pitch = pitch;
+            transform.SetPositionAndRotation(pos, Quaternion.Euler(pitch * Mathf.Rad2Deg, yaw * Mathf.Rad2Deg, 0f));
+            _camY = pos.y; _vel = Vector3.zero; _vy = 0f;
+        }
+
         int _aaIdx;
         // F10 cycles AA mode — diagnostic for the train shimmer. Modes are discovered from the
         // actual enum (SMAA was removed from some HDRP versions), so missing names are skipped.
@@ -222,6 +243,29 @@ namespace NeonKaido
             }
             Shader.SetGlobalFloat("_SimTime", t);
             NeonKaido.Atmo.PushGlobals();
+
+            if (Input.GetKeyDown(KeyCode.G) && !NeonKaido.CarGallery.Active) NeonKaido.CarGallery.Toggle();
+            if (NeonKaido.CarGallery.Active)
+            {
+                _cc.enabled = false;
+                NeonKaido.CarGallery.Update(dt);
+                // keep the city breathing without traffic/crowd/gameplay/chase logic
+                var gf = transform.position;
+                NeonKaido.WeatherDriver.Update(dt, t, gf);
+                NeonKaido.Soundscape.Update(dt, td);
+                if (Input.GetKeyDown(KeyCode.M)) NeonKaido.Soundscape.ToggleMusic();
+                for (int i = 0; i < NeonKaido.FacadeSigns.FlickerL.Count; i++)
+                {
+                    var l = NeonKaido.FacadeSigns.FlickerL[i];
+                    if (l == null) continue;
+                    l.intensity = NeonKaido.FacadeSigns.FlickerBase[i] * NeonKaido.FacadeSigns.Flicker(NeonKaido.FacadeSigns.FlickerSeed[i], NeonKaido.FacadeSigns.FlickerType[i], 0, t);
+                }
+                NeonKaido.TrafficSignals.Update(t);
+                NeonKaido.Koi.Update(td);
+                NeonKaido.Trains.Update(td);
+                return;
+            }
+
             // while driving the camera is the player root, so the world systems need the car as focus
             var focus = NeonKaido.Driving.Active ? NeonKaido.Driving.CarPosition : transform.position;
             NeonKaido.VehicleTraffic.Update(dt, t, focus);
@@ -454,6 +498,7 @@ namespace NeonKaido
 
         void OnGUI()
         {
+            if (NeonKaido.CarGallery.Active) { NeonKaido.CarGallery.DrawHud(); return; }
             var feet = NeonKaido.Driving.Active ? NeonKaido.Driving.CarPosition : transform.position;
             NeonKaido.GameplayHud.Draw(NeonKaido.Gameplay.Gigs, feet);
         }

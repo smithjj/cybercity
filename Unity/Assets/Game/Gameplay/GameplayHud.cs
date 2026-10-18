@@ -493,7 +493,7 @@ namespace NeonKaido
             Slot(x + 124 * z, y, !Enabled, "H", "HUD");
             y += 64 * z;
             _tinyC2().fontSize = (int)(10 * z); _tinyC2().normal.textColor = A(KR, 0.65f);
-            Label(new Rect(x, y + 4 * z, 480 * z, 14 * z), "CONNECTION 2077.11.04 · NODE KBK-09 · " + _fpsShown + " FPS", _tinyC2());
+            Label(new Rect(x, y + 4 * z, 620 * z, 14 * z), "CONNECTION 2077.11.04 · NODE KBK-09 · " + _fpsShown + " FPS · G SHOWROOM", _tinyC2());
 
             // stance (bottom-right)
             if (pc != null && pc.WalkMode && !NeonKaido.Driving.Active)

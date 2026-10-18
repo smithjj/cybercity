@@ -264,6 +264,13 @@ namespace NeonKaido.EditorTools
             return VehicleTraffic.Build(root.transform);
         }
 
+        // ---------------------------------------------------------------- car gallery
+        public static string CarGallery()
+        {
+            NeonKaido.CarGallery.Toggle();
+            return "gallery active=" + NeonKaido.CarGallery.Active + " selected=" + NeonKaido.CarGallery.SelectedName;
+        }
+
         // ---------------------------------------------------------------- driving
         // Teleport beside the spawn-kerb hero and enter it (Play mode).
         public static string DriveEnter()
