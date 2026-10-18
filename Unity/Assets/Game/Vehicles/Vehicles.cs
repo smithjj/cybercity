@@ -236,6 +236,56 @@ namespace NeonKaido
             Shader.SetGlobalVectorArray("_CarLColor", zero);
         }
 
+        static int _deliverySeq;
+        /// One player-grade car that is not traffic and not parked yet (NX-9 delivery, en route).
+        public static GameObject SpawnDeliveryCar(Transform parent, string type, Vector3 pos, float yawDeg, Color paint, Vector3 lights)
+        {
+            var go = SpawnShowcase(parent, type, pos, yawDeg, paint, lights);
+            if (go != null) go.name = "nx9_delivery_" + (++_deliverySeq);
+            return go;
+        }
+
+        /// Give a spawned delivery car the static chassis collider and make it enterable via
+        /// NearestParked / Driving.Enter. Called when the car has finished pulling up.
+        public static ParkedCar RegisterDelivered(string type, GameObject go)
+        {
+            if (go == null || _models == null || !_models.ContainsKey(type)) return null;
+            if (_parked == null) _parked = new List<ParkedCar>();
+            foreach (var p in _parked) if (p.go == go) return p;   // idempotent arrival
+            var rec = new ParkedCar { type = type, name = go.name, go = go };
+            AddCarCollider(rec);
+            _parked.Add(rec);
+            return rec;
+        }
+
+        public static void UnregisterDelivered(ParkedCar rec)
+        {
+            if (rec == null) return;
+            _parked?.Remove(rec);
+            if (rec.col != null) Object.Destroy(rec.col);
+            rec.col = null;
+        }
+
+        // A delivered car is neither in `_cars` nor the driven car, but its headlamps should
+        // still light the wet road and throw cones. Delivery keeps this slot refreshed while
+        // the car is approaching or waiting at the kerb. Cleared on boarding/despawn.
+        static GameObject _extraLitGo;
+        static string _extraLitType;
+        static float _extraLitBrake;
+        public static void SetExtraLitCar(GameObject go, string type, float brake)
+        {
+            _extraLitGo = go;
+            _extraLitType = type;
+            _extraLitBrake = brake;
+        }
+
+        public static void ClearExtraLitCar()
+        {
+            _extraLitGo = null;
+            _extraLitType = null;
+            _extraLitBrake = 0f;
+        }
+
         public static string Build(Transform root)
         {
             var err = LoadModels();
@@ -348,6 +398,24 @@ namespace NeonKaido
                 count++;
             }
             return count;
+        }
+
+        /// Smallest centre-to-centre z distance from a parked car in the same kerb row.
+        /// Delivery uses it to nudge its drop point into a gap instead of parking 20 cm
+        /// inside a parked car's flank. 999 = no parked car nearby.
+        public static float ParkedZClearance(float x, float z)
+        {
+            if (_parked == null) return 999f;
+            float best = 999f;
+            foreach (var p in _parked)
+            {
+                if (p == null || p.go == null) continue;
+                var q = p.go.transform.position;
+                if (Mathf.Abs(q.x - x) > 2.6f) continue;
+                float d = Mathf.Abs(q.z - z);
+                if (d < best) best = d;
+            }
+            return best;
         }
 
         // Nearest enterable parked car (JS nearestCar over parked + loose). Distances are
@@ -928,6 +996,25 @@ namespace NeonKaido
                     slot++; headN++;
                 }
             }
+            // the delivered car (headlamps on, hazards/brake fed by Delivery)
+            if (_extraLitGo != null && _extraLitType != null && _models.TryGetValue(_extraLitType, out var xm))
+            {
+                var tr = _extraLitGo.transform;
+                if (tailN < 28 && slot < 42)
+                {
+                    var p = tr.TransformPoint(new Vector3(0f, 0.3f, -(xm.mf.length * 0.5f + 1.5f)));
+                    _carLPos[slot] = new Vector4(p.x, p.y, p.z, 7f);
+                    _carLColor[slot] = new Vector4(TAIL_COL.x, TAIL_COL.y, TAIL_COL.z, 0.9f + _extraLitBrake * 2.5f);
+                    slot++; tailN++;
+                }
+                if (headN < 14 && slot < 42)
+                {
+                    var p = tr.TransformPoint(new Vector3(0f, 0.7f, xm.mf.length * 0.5f + 2.6f));
+                    _carLPos[slot] = new Vector4(p.x, p.y, p.z, 16f);
+                    _carLColor[slot] = new Vector4(HEAD_COL.x, HEAD_COL.y, HEAD_COL.z, 9f);
+                    slot++; headN++;
+                }
+            }
             // the spawn-kerb hero keeps its head + tail lamps on in normal play
             if (_heroLampT == null) { var h = GameObject.Find("parked_hero"); if (h != null) _heroLampT = h.transform; }
             if (_heroLampT != null && (_drivenGo == null || _heroLampT.gameObject != _drivenGo))
@@ -1123,6 +1210,17 @@ namespace NeonKaido
                 if (!go.activeSelf) go.SetActive(true);
                 used++;
             }
+            if (_extraLitGo != null && _extraLitType != null && _models.TryGetValue(_extraLitType, out var xm) && used < _poolPool.Count)
+            {
+                var tr = _extraLitGo.transform;
+                var origin = tr.TransformPoint(new Vector3(0f, 0f, xm.mf.length * 0.5f));
+                var go = _poolPool[used];
+                go.transform.SetPositionAndRotation(origin, tr.rotation);
+                _poolBlocks[used].SetFloat("_Intensity", 1f);
+                _poolRenderers[used].SetPropertyBlock(_poolBlocks[used]);
+                if (!go.activeSelf) go.SetActive(true);
+                used++;
+            }
             for (int i = used; i < _poolPool.Count; i++)
                 if (_poolPool[i].activeSelf) _poolPool[i].SetActive(false);
         }
@@ -1174,6 +1272,23 @@ namespace NeonKaido
                     var go = _beamPool[used];
                     go.transform.SetPositionAndRotation(origin, _drivenGo.transform.rotation);
                     _beamBlocks[used].SetFloat("_Intensity", k);
+                    _beamRenderers[used].SetPropertyBlock(_beamBlocks[used]);
+                    if (!go.activeSelf) go.SetActive(true);
+                    used++;
+                }
+            }
+            if (_extraLitGo != null && _extraLitType != null && _models.TryGetValue(_extraLitType, out var xm) && used < _beamPool.Count)
+            {
+                var mf = xm.mf;
+                var origin = _extraLitGo.transform.TransformPoint(new Vector3(0f, mf.height * 0.42f + 0.05f, mf.length * 0.5f - 0.1f));
+                var toCam = camPos - origin;
+                float d = toCam.magnitude;
+                if (d > 0.01f)
+                {
+                    float facing = Mathf.Max(0f, Vector3.Dot(_extraLitGo.transform.forward, toCam / d));
+                    var go = _beamPool[used];
+                    go.transform.SetPositionAndRotation(origin, _extraLitGo.transform.rotation);
+                    _beamBlocks[used].SetFloat("_Intensity", Mathf.Pow(1f - facing, 3f));
                     _beamRenderers[used].SetPropertyBlock(_beamBlocks[used]);
                     if (!go.activeSelf) go.SetActive(true);
                     used++;

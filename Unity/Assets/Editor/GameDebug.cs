@@ -271,6 +271,45 @@ namespace NeonKaido.EditorTools
             return "gallery active=" + NeonKaido.CarGallery.Active + " selected=" + NeonKaido.CarGallery.SelectedName;
         }
 
+        // ---------------------------------------------------------------- NX-9 delivery
+        public static string DeliveryPhone()
+        {
+            NeonKaido.Delivery.TogglePhone();
+            return "phone=" + NeonKaido.Delivery.PhoneOpen + " " + NeonKaido.Delivery.StateText();
+        }
+
+        public static string DeliveryOrder(string type = "hero", int paint = 0)
+        {
+            int i = NeonKaido.CarCatalog.IndexOf(type);
+            if (i < 0) return "DeliveryOrder: unknown type " + type;
+            bool ok = NeonKaido.Delivery.Order(i, paint);
+            return (ok ? "ordered " : "order failed ") + NeonKaido.Delivery.StateText();
+        }
+
+        public static string DeliveryState() => NeonKaido.Delivery.StateText();
+
+        public static string DeliveryWarp() => NeonKaido.Delivery.DebugWarp();
+
+        public static string DeliveryArrive() => NeonKaido.Delivery.DebugArrive();
+
+        public static string DeliveryClear()
+        {
+            NeonKaido.Delivery.Reset();
+            return NeonKaido.Delivery.StateText();
+        }
+
+        public static string DeliveryEnter()
+        {
+            var pc = UnityEngine.Object.FindObjectOfType<NeonKaido.PlayerController>();
+            var go = NeonKaido.Delivery.CarObject;
+            if (pc == null) return "DeliveryEnter: no PlayerController";
+            if (go == null) return "DeliveryEnter: no delivered car";
+            pc.Teleport(go.transform.position.x + 2.2f, 2.0f, go.transform.position.z);
+            bool ok = NeonKaido.Driving.TryEnter(pc);
+            return ok ? "entered " + NeonKaido.Driving.CarName + " at " + go.transform.position.ToString("F1")
+                      : "DeliveryEnter: no car within 4.5m";
+        }
+
         // ---------------------------------------------------------------- driving
         // Teleport beside the spawn-kerb hero and enter it (Play mode).
         public static string DriveEnter()

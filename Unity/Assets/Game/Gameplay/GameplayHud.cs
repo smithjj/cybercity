@@ -64,6 +64,23 @@ namespace NeonKaido
             AddToast("SYS//KBK-09", h, l1, null, info: true, 3.5f);
         }
 
+        /// Dispatch-app toast (NX-9 delivery): yellow gig-style card, 5 s.
+        public static void DispatchToast(string h, string l1)
+        {
+            AddToast("NX-9 // DISPATCH", h, l1, null, info: false, 5f);
+        }
+
+        public static double ClockMinutes => _clock;
+        public static string ClockString
+        {
+            get
+            {
+                int m = Mathf.FloorToInt((float)(_clock % 1440.0));
+                if (m < 0) m += 1440;
+                return (m / 60).ToString("00") + ":" + (m % 60).ToString("00");
+            }
+        }
+
         public static void GigCompleteToast(GigDef g, int eddies)
         {
             AddToast(g.Fixer + " // GIG COMPLETE", g.Title,
@@ -491,9 +508,11 @@ namespace NeonKaido
                 || (Gameplay.Prompt.HasValue && Gameplay.Prompt.Value.Key == "F"), "F",
                 NeonKaido.Driving.Active ? "EXIT" : "VEHICLE");
             Slot(x + 124 * z, y, !Enabled, "H", "HUD");
-            y += 64 * z;
+            Slot(x + 186 * z, y, NeonKaido.Delivery.PhoneOpen || NeonKaido.Delivery.Pending, "P", "NX-9");
             _tinyC2().fontSize = (int)(10 * z); _tinyC2().normal.textColor = A(KR, 0.65f);
-            Label(new Rect(x, y + 4 * z, 620 * z, 14 * z), "CONNECTION 2077.11.04 · NODE KBK-09 · " + _fpsShown + " FPS · G SHOWROOM", _tinyC2());
+            // status line above the slot row (below the row it collided with the slot labels)
+            Label(new Rect(x, Screen.height - 118 * z, 900 * z, 14 * z),
+                  "CONNECTION 2077.11.04 · NODE KBK-09 · " + _fpsShown + " FPS · G SHOWROOM · P NX-9", _tinyC2());
 
             // stance (bottom-right)
             if (pc != null && pc.WalkMode && !NeonKaido.Driving.Active)
@@ -559,7 +578,7 @@ namespace NeonKaido
             Border(r, act ? KY : A(KC, 0.45f), 1);
             // icon approximated: eye → 2 rects, car → glyph, hud → corners
             _cyan.fontSize = (int)(17 * Z); _cyan.alignment = TextAnchor.MiddleCenter; _cyan.normal.textColor = c;
-            string glyph = key == "V" ? "◉" : key == "F" ? "⌁" : "▣";
+            string glyph = key == "V" ? "◉" : key == "F" ? "⌁" : key == "P" ? "▯" : "▣";
             Label(new Rect(x, y + 14 * Z, 54 * Z, 26 * Z), glyph, _cyan);
             _cyan.alignment = TextAnchor.UpperLeft;
             _cyan.fontSize = (int)(12 * Z); _cyan.normal.textColor = A(c, 0.9f);

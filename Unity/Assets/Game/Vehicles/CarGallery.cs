@@ -32,14 +32,6 @@ namespace NeonKaido
         const float GalleryZ = 160f;                                          // Unity z on the avenue
         const float FaceYaw = 180f;                                           // nose toward the camera (south)
 
-        static readonly Dictionary<string, (string name, string klass, string blurb, float mass, float top)> Info = new()
-        {
-            ["kei"] = ("MIZUCHI KEI", "CITY KEI", "Tiny urban runabout. Cheap and easy to park.", 850, 40),
-            ["taxi"] = ("KAIDO CAB", "TAXI SEDAN", "The city's workhorse. Seats four.", 1350, 50),
-            ["hero"] = ("KUROGANE GT-R", "SPORTS COUPE", "Twin-turbo flagship. Black on black.", 1550, 68),
-            ["van"] = ("ISUZU-ELF FREIGHT", "FREIGHT VAN", "Box body, long wheelbase, big payload.", 3200, 36),
-        };
-
         static readonly List<Car> _cars = new();
         static Transform _root;
         static PlayerController _pc;
@@ -109,6 +101,12 @@ namespace NeonKaido
                 GameplayHud.Note("GALLERY UNAVAILABLE", "PARK THE VEHICLE BEFORE ENTERING THE SHOWROOM");
                 return;
             }
+            if (NeonKaido.Delivery.Pending)
+            {
+                GameplayHud.Note("SHOWROOM LOCKED", "NX-9 DELIVERY IN PROGRESS — PRESS P TO CHECK IT");
+                return;
+            }
+            NeonKaido.Delivery.ClosePhone();
             _pc = PlayerController.I;
             if (_pc == null) return;
             var err = VehicleTraffic.LoadModels();
@@ -161,9 +159,10 @@ namespace NeonKaido
             for (int i = 0; i < Types.Length; i++)
             {
                 string type = Types[i];
-                var info = Info[type];
-                var pal = PaletteForCar(type);
-                int paint = DefaultPaint(type, pal);
+                var e = CarCatalog.Get(type);
+                if (e == null) continue;
+                var pal = e.Palette;
+                int paint = Mathf.Clamp(e.DefaultPaint, 0, Mathf.Max(0, pal.Length - 1));
                 var go = VehicleTraffic.SpawnShowcase(_root, type, new Vector3(Xs[i], 0f, GalleryZ), FaceYaw,
                                                        pal[paint], new Vector3(1f, 1f, 0f));
                 if (go == null) continue;
@@ -171,11 +170,11 @@ namespace NeonKaido
                 _cars.Add(new Car
                 {
                     type = type,
-                    name = info.name,
-                    klass = info.klass,
-                    blurb = info.blurb,
-                    mass = info.mass,
-                    top = info.top,
+                    name = e.Name,
+                    klass = e.Klass,
+                    blurb = e.Blurb,
+                    mass = e.Mass,
+                    top = e.Top,
                     length = mf != null ? mf.length : 4.5f,
                     width = mf != null ? mf.width : 1.9f,
                     height = mf != null ? mf.height : 1.5f,
@@ -187,24 +186,6 @@ namespace NeonKaido
             }
             _root.gameObject.SetActive(false);
             _built = true;
-        }
-
-        static Color Hex(uint hex) => new Color(((hex >> 16) & 255) / 255f, ((hex >> 8) & 255) / 255f, (hex & 255) / 255f);
-
-        // The showroom uses the street palettes, except the hero whose dumped palette is one
-        // near-black. Extra house colours make the flagship legible under the rig lights.
-        static Color[] PaletteForCar(string type)
-        {
-            if (type == "hero")
-                return new[] { Hex(0x5c0f16), Hex(0x0a0a0c), Hex(0x2a2e36), Hex(0xd6d2c8), Hex(0x14324a) };
-            return VehicleTraffic.PaletteFor(type);
-        }
-
-        static int DefaultPaint(string type, Color[] pal)
-        {
-            // hero black, kei white, taxi yellow, van steel blue (fall back to 0)
-            int want = type == "hero" ? 0 : type == "kei" ? 0 : type == "taxi" ? 0 : type == "van" ? 3 : 0;
-            return Mathf.Clamp(want, 0, Mathf.Max(0, pal.Length - 1));
         }
 
         static void Apply(Car c)
@@ -225,6 +206,10 @@ namespace NeonKaido
             }
             if (_vehRoot != null) _vehRoot.SetActive(!hide);
             if (_crowdRoot != null) _crowdRoot.SetActive(!hide);
+            // an already-delivered car lives outside the Vehicles root; tuck it away too so it
+            // never photobombs the line-up (pending/being-driven deliveries are gated out above)
+            var delivered = NeonKaido.Delivery.CarObject;
+            if (delivered != null) delivered.SetActive(!hide);
         }
 
         // ================================================================ per-frame
@@ -391,7 +376,7 @@ namespace NeonKaido
                     Fill(chip, c0.palette[i]);
                     if (i == c0.paint) Border(chip, KY, 2);
                 }
-                Label(new Rect(card.x + 16 * z, card.y + 202 * z, lw - 32 * z, 16 * z), "DELIVERY  ·  AVAILABLE 24H  ·  NX-9 PHONE APP", _tiny);
+                Label(new Rect(card.x + 16 * z, card.y + 202 * z, lw - 32 * z, 16 * z), "NX-9 DELIVERY  ·  FROM €$120  ·  PHONE APP", _tiny);
                 Label(new Rect(card.x + 16 * z, card.y + 222 * z, lw - 32 * z, 18 * z), "DISPATCH FROM KABUKICHO-9 DEPOT", _klass);
             }
 

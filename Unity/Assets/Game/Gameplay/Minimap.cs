@@ -39,12 +39,16 @@ namespace NeonKaido
         static float _routeT;
         static bool _graphBuilt;
 
+        /// Extra world-space marker (Unity coords) drawn cyan on the map — the NX-9
+        /// delivery car while it is en route or waiting. Set/cleared by Delivery.
+        public static Vector3? ExtraMarker;
+
         // small sprites baked once (IMGUI cannot draw polygons/gradients directly)
         static Texture2D _arrowTex, _coneTex, _discTex, _vignetteTex;
         static Texture2D _white;
 
         // gui styles
-        static GUIStyle _time, _timeAm, _weather, _loc, _tiny, _corner, _badge;
+        static GUIStyle _time, _timeAm, _weather, _loc, _tiny, _corner, _badge, _nx;
         static Font _font;
 
         // ================================================================ bake
@@ -468,6 +472,7 @@ namespace NeonKaido
             _tiny = Make(10, new Color(KR.r, KR.g, KR.b, 0.75f), FontStyle.Normal, TextAnchor.MiddleRight);
             _corner = Make(9, new Color(KC.r, KC.g, KC.b, 0.6f), FontStyle.Normal, TextAnchor.MiddleLeft);
             _badge = Make(11, new Color(0.035f, 0.075f, 0.086f), FontStyle.Bold, TextAnchor.MiddleCenter, rich: false);
+            _nx = Make(9, new Color(KC.r, KC.g, KC.b, 0.9f), FontStyle.Bold, TextAnchor.UpperCenter, rich: false);
         }
 
         // 4x4-supersampled polygon fill for the player arrow (canvas polygon in minimap.js)
@@ -583,8 +588,8 @@ namespace NeonKaido
         static int _fw, _fh;
         static float _fZoom = 1f, _fCx, _fCy, _fK = 1f, _fSc = 1f, _fRotDeg, _fRotRad, _fHeading;
         static float _fPpx, _fPpy, _fElev;
-        static Vector2 _fPos, _fTarget;
-        static bool _fHasTarget, _fRotate, _fCar;
+        static Vector2 _fPos, _fTarget, _fExtra;
+        static bool _fHasTarget, _fRotate, _fCar, _fHasExtra;
 
         static float HeadingFrom(Camera cam)
         {
@@ -633,6 +638,14 @@ namespace NeonKaido
                 if (_route != null && _route.Count > 0) _route[0] = ps;
             }
 
+            var extra = Vector2.zero;
+            bool hasExtra = ExtraMarker.HasValue;
+            if (hasExtra)
+            {
+                var ev = SimCoord.FromUnity(ExtraMarker.Value);
+                extra = new Vector2(ev.x, ev.z);
+            }
+
             if (_rt == null || _rt.width != W || _rt.height != H)
             {
                 if (_rt != null) { _rt.Release(); Object.Destroy(_rt); }
@@ -662,6 +675,7 @@ namespace NeonKaido
             _fCx = W * 0.5f; _fCy = H * 0.56f;
             _fK = k; _fSc = sc; _fRotDeg = rotDeg; _fRotRad = rotRad; _fHeading = heading;
             _fPpx = ppx; _fPpy = ppy; _fPos = ps; _fTarget = tgt; _fHasTarget = hasTarget;
+            _fExtra = extra; _fHasExtra = hasExtra;
             _fRotate = rotate;
             _fElev = car ? posU.y + 0.3f : posU.y - 1.6f;   // feet height (eye-root rig) / street-level car
             _fCar = car;
@@ -740,6 +754,23 @@ namespace NeonKaido
                 Fill(new Rect(tp.x - r, tp.y - r, r * 2f, r * 2f), edge ? new Color(KY.r, KY.g, KY.b, 0.85f) : KY);
                 Fill(new Rect(tp.x - r * 0.35f, tp.y - r * 0.35f, r * 0.7f, r * 0.7f), new Color(0.1f, 0.078f, 0f));
                 GUI.matrix = saved;
+            }
+
+            // NX-9 delivery car (cyan so it reads apart from the yellow gig target)
+            if (_fHasExtra)
+            {
+                var rawE = ToS(_fExtra.x, _fExtra.y);
+                var ep = ClampEdge(rawE, 28f * z);   // keep clear of the rim N badge
+                bool eEdge = (ep - rawE).sqrMagnitude > 0.01f;
+                float epulse = 1f + Mathf.Sin(Time.unscaledTime * 5f) * 0.12f;
+                DrawDisc(ep, 7.5f * z * epulse, new Color(KC.r, KC.g, KC.b, 0.12f));
+                var se = GUI.matrix;
+                GUIUtility.RotateAroundPivot(45f, ep);
+                Fill(new Rect(ep.x - 4f * z, ep.y - 4f * z, 8f * z, 8f * z),
+                     eEdge ? new Color(KC.r, KC.g, KC.b, 0.8f) : KC);
+                GUI.matrix = se;
+                DrawDisc(ep, 2f * z, new Color(0.02f, 0.08f, 0.09f));
+                Label(new Rect(ep.x - 26f * z, ep.y + 8f * z, 52f * z, 12f * z), "NX-9", _nx);
             }
 
             // player: view cone + arrow (rotate about the map centre)

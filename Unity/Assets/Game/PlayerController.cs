@@ -244,7 +244,7 @@ namespace NeonKaido
             Shader.SetGlobalFloat("_SimTime", t);
             NeonKaido.Atmo.PushGlobals();
 
-            if (Input.GetKeyDown(KeyCode.G) && !NeonKaido.CarGallery.Active) NeonKaido.CarGallery.Toggle();
+            if (Input.GetKeyDown(KeyCode.G) && !NeonKaido.CarGallery.Active && !NeonKaido.Delivery.PhoneOpen) NeonKaido.CarGallery.Toggle();
             if (NeonKaido.CarGallery.Active)
             {
                 _cc.enabled = false;
@@ -254,20 +254,31 @@ namespace NeonKaido
                 NeonKaido.WeatherDriver.Update(dt, t, gf);
                 NeonKaido.Soundscape.Update(dt, td);
                 if (Input.GetKeyDown(KeyCode.M)) NeonKaido.Soundscape.ToggleMusic();
-                for (int i = 0; i < NeonKaido.FacadeSigns.FlickerL.Count; i++)
-                {
-                    var l = NeonKaido.FacadeSigns.FlickerL[i];
-                    if (l == null) continue;
-                    l.intensity = NeonKaido.FacadeSigns.FlickerBase[i] * NeonKaido.FacadeSigns.Flicker(NeonKaido.FacadeSigns.FlickerSeed[i], NeonKaido.FacadeSigns.FlickerType[i], 0, t);
-                }
-                NeonKaido.TrafficSignals.Update(t);
-                NeonKaido.Koi.Update(td);
-                NeonKaido.Trains.Update(td);
+                CityAmbient(t, td);
+                return;
+            }
+
+            // NX-9 phone: freeze the player but keep the street alive; P/Esc close it in UpdatePhone
+            if (Input.GetKeyDown(KeyCode.P) && !NeonKaido.Delivery.PhoneOpen) NeonKaido.Delivery.TogglePhone();
+            if (NeonKaido.Delivery.PhoneOpen)
+            {
+                _cc.enabled = false;
+                var pf = transform.position;
+                NeonKaido.Delivery.UpdatePhone(dt);
+                NeonKaido.Delivery.Update(dt);
+                NeonKaido.VehicleTraffic.Update(dt, t, pf);
+                NeonKaido.WeatherDriver.Update(dt, t, pf);
+                NeonKaido.Crowd.Update(dt, t, pf);
+                NeonKaido.Soundscape.Update(dt, td);
+                if (Input.GetKeyDown(KeyCode.M)) NeonKaido.Soundscape.ToggleMusic();
+                CityAmbient(t, td);
+                NeonKaido.Minimap.Prepare(dt);
                 return;
             }
 
             // while driving the camera is the player root, so the world systems need the car as focus
             var focus = NeonKaido.Driving.Active ? NeonKaido.Driving.CarPosition : transform.position;
+            NeonKaido.Delivery.Update(dt);
             NeonKaido.VehicleTraffic.Update(dt, t, focus);
             NeonKaido.WeatherDriver.Update(dt, t, focus);
             NeonKaido.Crowd.Update(dt, t, focus);
@@ -282,15 +293,7 @@ namespace NeonKaido
             }
             NeonKaido.Soundscape.Update(dt, td);
             if (Input.GetKeyDown(KeyCode.M)) NeonKaido.Soundscape.ToggleMusic();
-            for (int i = 0; i < NeonKaido.FacadeSigns.FlickerL.Count; i++)
-            {
-                var l = NeonKaido.FacadeSigns.FlickerL[i];
-                if (l == null) continue;
-                l.intensity = NeonKaido.FacadeSigns.FlickerBase[i] * NeonKaido.FacadeSigns.Flicker(NeonKaido.FacadeSigns.FlickerSeed[i], NeonKaido.FacadeSigns.FlickerType[i], 0, t);
-            }
-            NeonKaido.TrafficSignals.Update(t);
-            NeonKaido.Koi.Update(td);
-            NeonKaido.Trains.Update(td);
+            CityAmbient(t, td);
 
             if (!NeonKaido.Driving.Active && Input.GetKeyDown(KeyCode.V)) { WalkMode = !WalkMode; _locked = false; }
             if (Input.GetKeyDown(KeyCode.H)) NeonKaido.GameplayHud.Toggle();
@@ -342,6 +345,19 @@ namespace NeonKaido
             }
             // HUD map: rotate/scale the baked city map into its RT off the GUI thread
             NeonKaido.Minimap.Prepare(dt);
+        }
+
+        void CityAmbient(float t, double td)
+        {
+            for (int i = 0; i < NeonKaido.FacadeSigns.FlickerL.Count; i++)
+            {
+                var l = NeonKaido.FacadeSigns.FlickerL[i];
+                if (l == null) continue;
+                l.intensity = NeonKaido.FacadeSigns.FlickerBase[i] * NeonKaido.FacadeSigns.Flicker(NeonKaido.FacadeSigns.FlickerSeed[i], NeonKaido.FacadeSigns.FlickerType[i], 0, t);
+            }
+            NeonKaido.TrafficSignals.Update(t);
+            NeonKaido.Koi.Update(td);
+            NeonKaido.Trains.Update(td);
         }
 
         void StepFly(float dt)
@@ -501,6 +517,7 @@ namespace NeonKaido
             if (NeonKaido.CarGallery.Active) { NeonKaido.CarGallery.DrawHud(); return; }
             var feet = NeonKaido.Driving.Active ? NeonKaido.Driving.CarPosition : transform.position;
             NeonKaido.GameplayHud.Draw(NeonKaido.Gameplay.Gigs, feet);
+            NeonKaido.Delivery.DrawHud();
         }
 
         void OnApplicationFocus(bool focus)
@@ -511,6 +528,7 @@ namespace NeonKaido
         void OnDisable()
         {
             Cursor.lockState = CursorLockMode.None; Cursor.visible = true;
+            NeonKaido.Delivery.ClosePhone();
         }
     }
 }
