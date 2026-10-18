@@ -264,6 +264,53 @@ namespace NeonKaido.EditorTools
             return VehicleTraffic.Build(root.transform);
         }
 
+        // ---------------------------------------------------------------- driving
+        // Teleport beside the spawn-kerb hero and enter it (Play mode).
+        public static string DriveEnter()
+        {
+            var pc = UnityEngine.Object.FindObjectOfType<NeonKaido.PlayerController>();
+            var h = GameObject.Find("parked_hero");
+            if (pc == null) return "DriveEnter: no PlayerController";
+            if (h == null) return "DriveEnter: no parked_hero (build vehicles)";
+            pc.Teleport(h.transform.position.x + 2.2f, 2.0f, h.transform.position.z);
+            bool ok = NeonKaido.Driving.TryEnter(pc);
+            return ok ? "entered " + NeonKaido.Driving.CarName + " at " + h.transform.position.ToString("F1") : "DriveEnter: no car within 4.5m";
+        }
+
+        public static string DriveState()
+        {
+            var d = NeonKaido.Driving.Active;
+            if (!d) return "driving=false prompt=" + (NeonKaido.Driving.Prompt ?? "-");
+            var b = NeonKaido.Driving.Body;
+            return $"driving=true car={NeonKaido.Driving.CarName} kmh={NeonKaido.Driving.SpeedKmh:F1} gear={NeonKaido.Driving.Gear} rev={NeonKaido.Driving.Reverse} " +
+                   $"pos={NeonKaido.Driving.CarPosition.ToString("F2")} vel={(b != null ? b.linearVelocity.ToString("F2") : "null")} " +
+                   $"grounded={(b != null && Mathf.Abs(b.linearVelocity.y) < 3f)} prompt={NeonKaido.Driving.Prompt ?? "-"}";
+        }
+
+        public static string DriveTest(double seconds = 2.0)
+        {
+            if (!NeonKaido.Driving.Active) return "DriveTest: not driving";
+            NeonKaido.Driving.TestDrive = (float)seconds;
+            return "test throttle " + seconds + "s";
+        }
+
+        public static string DriveReset()
+        {
+            if (!NeonKaido.Driving.Active) return "DriveReset: not driving";
+            NeonKaido.Driving.Reset();
+            return "reset " + NeonKaido.Driving.CarPosition.ToString("F2");
+        }
+
+        public static string DriveExit()
+        {
+            var pc = UnityEngine.Object.FindObjectOfType<NeonKaido.PlayerController>();
+            if (pc == null) return "DriveExit: no PlayerController";
+            if (!NeonKaido.Driving.Active) return "DriveExit: not driving";
+            var p = NeonKaido.Driving.CarPosition;
+            NeonKaido.Driving.Exit(pc);
+            return "exited at " + p.ToString("F2") + " player=" + pc.transform.position.ToString("F2");
+        }
+
         public static string BuildWeather()
         {
             var root = GameObject.Find("CityRoot");
@@ -936,16 +983,27 @@ namespace NeonKaido.EditorTools
                             sb.AppendLine("HDRP fog component DISABLED (shader fog is authoritative)");
                         }
                     }
-                    else if (tn == "PhysicallyBasedSky" || tn.Contains("Sky"))
+                    else if (tn == "VisualEnvironment")
                     {
-                        var en = so.FindProperty("enabled");
-                        if (en != null)
+                        // HDRP has no per-sky "enabled" switch — the only way to stop the
+                        // pipeline from drawing its own sky is skyType = None. Left at
+                        // PhysicallyBased/HDRI, HDRP paints its sky AFTER opaques and
+                        // covers the custom dome (the blinding white sky).
+                        var st = so.FindProperty("skyType");
+                        if (st != null)
                         {
-                            en.FindPropertyRelative("m_OverrideState").intValue = 1;
-                            en.FindPropertyRelative("m_Value").intValue = 0;
-                            so.ApplyModifiedProperties();
-                            sb.AppendLine("HDRP sky component disabled (custom dome does background)");
+                            st.FindPropertyRelative("m_OverrideState").intValue = 1;
+                            st.FindPropertyRelative("m_Value").intValue = 0;
                         }
+                        var ct = so.FindProperty("cloudType");
+                        if (ct != null)
+                        {
+                            ct.FindPropertyRelative("m_OverrideState").intValue = 1;
+                            ct.FindPropertyRelative("m_Value").intValue = 0;
+                        }
+                        so.ApplyModifiedProperties();
+                        EditorUtility.SetDirty(comp);
+                        sb.AppendLine("HDRP sky OFF (VisualEnvironment skyType=None; custom dome is the sky)");
                     }
                     else if (tn == "Exposure")
                     {
@@ -959,7 +1017,10 @@ namespace NeonKaido.EditorTools
                 }
             }
             else sb.AppendLine("WARNING: volume profile missing");
-            var vol = GameObject.Find("AtmoVolume");
+            // GameObject.Find misses the saved-inactive AtmoVolume — search inactive too.
+            GameObject vol = null;
+            foreach (var t in UnityEngine.Object.FindObjectsByType<Transform>(FindObjectsInactive.Include))
+                if (t.name == "AtmoVolume") { vol = t.gameObject; break; }
             if (vol == null)
             {
                 vol = new GameObject("AtmoVolume");
@@ -967,6 +1028,16 @@ namespace NeonKaido.EditorTools
                 v.isGlobal = true;
                 v.sharedProfile = profile;
                 sb.AppendLine("volume added");
+            }
+            else
+            {
+                var v = vol.GetComponent<Volume>();
+                if (v == null) v = vol.AddComponent<Volume>();
+                v.enabled = true;
+                v.isGlobal = true;
+                if (v.sharedProfile == null) v.sharedProfile = profile;
+                vol.SetActive(true);
+                sb.AppendLine("AtmoVolume enabled (HDRP sky off, exposure fixed)");
             }
             EditorSceneManager.SaveScene(EditorSceneManager.GetActiveScene());
             return sb.Length == 0 ? "atmosphere: up to date" : sb.ToString().TrimEnd();

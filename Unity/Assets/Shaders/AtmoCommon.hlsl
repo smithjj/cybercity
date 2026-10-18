@@ -31,6 +31,11 @@ float3 NkHazeColor(float3 dir, float3 fogColor, float3 midColor, float3 zenithCo
 float _BLCount; // number of active point lights
 float4 _BLPos[384];   // xyz = unity pos, w = range
 float4 _BLColor[384]; // rgb = color, w = intensity
+// dynamic car lamps: VehicleTraffic pushes the nearest lit cars each frame
+// (JS lights.js: 28 tail lights range 7, 14 head lights range 16)
+float _CarLCount;
+float4 _CarLPos[42];
+float4 _CarLColor[42];
 
 float NkBh21(float2 p)
 {
@@ -83,6 +88,29 @@ float3 NkBPointLights(float3 N, float3 P, float3 V, float3 albedo, float rough, 
         float ndl = saturate(dot(N, L));
         if (ndl <= 0) continue;
         float3 c = _BLColor[i].rgb * _BLColor[i].w * att;
+        acc += c * (ndl * albedo);
+        float3 H = normalize(L + V);
+        float shin = exp2(max(2.0, -10.0 * rough + 12.0));
+        float spec = pow(saturate(dot(N, H)), shin) * (1.0 - rough) * (0.5 + 0.5 * metal);
+        acc += c * spec * 0.35 * specTint;
+    }
+    // car head/tail point lights (lights.js tail/head pools)
+    [loop]
+    for (int j = 0; j < 42; j++)
+    {
+        if (j >= (int)_CarLCount) break;
+        float3 toL = _CarLPos[j].xyz - P;
+        float d2 = dot(toL, toL);
+        float range = max(_CarLPos[j].w, 0.01);
+        if (d2 > range * range) continue;
+        float d = sqrt(d2);
+        float att = 1.0 / max(d * d, 0.01);
+        float w = saturate(1.0 - pow(d / range, 4.0));
+        att *= w * w;
+        float3 L = toL / max(d, 1e-5);
+        float ndl = saturate(dot(N, L));
+        if (ndl <= 0) continue;
+        float3 c = _CarLColor[j].rgb * _CarLColor[j].w * att;
         acc += c * (ndl * albedo);
         float3 H = normalize(L + V);
         float shin = exp2(max(2.0, -10.0 * rough + 12.0));

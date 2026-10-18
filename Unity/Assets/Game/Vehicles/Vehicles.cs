@@ -15,7 +15,10 @@ namespace NeonKaido
 
         static readonly Dictionary<string, Color[]> Palette = new()
         {
-            ["hero"] = new[] { new Color(0x0a, 0x0a, 0x0c) },
+            // NOTE: must go through C() — `new Color(0x0a, 0x0a, 0x0c)` picks the FLOAT ctor (10,10,12),
+            // and SetColor gamma-encodes on upload to linear (158,158,237): an HDR-white body that AgX
+            // flattens into flat glowing pink. Hex literals are 0..255 — always divide.
+            ["hero"] = new[] { C(0x0a0a0c) },
             ["kei"] = new[] { C(0xd8d6d0), C(0x2a3a52), C(0x8a1c22), C(0x101012), C(0xb7b9bc), C(0x5b6b4a), C(0xc9b48a), C(0x1d4a5c) },
             ["taxi"] = new[] { C(0xf0b21a), C(0x12161a), C(0x1c3f2a), C(0xe8e4da) },
             ["van"] = new[] { C(0xb4b4b0), C(0xaaa8a2), C(0x7d838a), C(0x24425e), C(0xbcbcb6) },
@@ -23,7 +26,22 @@ namespace NeonKaido
         };
         static Color C(int hex) => new Color(((hex >> 16) & 255) / 255f, ((hex >> 8) & 255) / 255f, (hex & 255) / 255f);
 
-        class Manifest { public float length, width, height, axleF, axleR, wheelRadius; public float[] min, max; }
+        public class Manifest { public float length, width, height, axleF, axleR, wheelRadius; public float[] min, max; }
+
+        // A drivable (formerly parked) car. JS keeps these in vehicles/index.js `parked` and
+        // moves the record into `loose` on exit; here the GameObject stays put and `taken`
+        // just gates re-entry while Driving owns its Rigidbody.
+        public class ParkedCar
+        {
+            public string type, name;
+            public GameObject go;
+            public BoxCollider col;
+            public bool taken;
+        }
+        static List<ParkedCar> _parked;
+
+        public static Manifest GetManifest(string type) =>
+            _models != null && _models.TryGetValue(type, out var m) ? m.mf : null;
 
         class Lane
         {
@@ -44,6 +62,7 @@ namespace NeonKaido
             {
                 var nm = r.gameObject.name;
                 if (!nm.StartsWith("parked_")) continue;
+                if (_drivenGo != null && r.gameObject == _drivenGo) continue; // Driving owns its block
                 var mpb = new MaterialPropertyBlock();
                 r.GetPropertyBlock(mpb);
                 if (mpb.GetVector("_PaintColor").magnitude > 0.01f) continue;
@@ -56,7 +75,11 @@ namespace NeonKaido
                 else continue;
                 mpb.SetColor("_PaintColor", paint);
                 mpb.SetFloat("_Spin", 0);
-                mpb.SetVector("_LightLv", Vector3.zero);
+                // The spawn-kerb hero idles with head + tail lamps on (JS index.js sets
+                // light (1,1,0) on it); every other parked car has light.set(0,0,0).
+                // Heal runs for every near-black parked paint, so it must restore this
+                // rather than blanket-zeroing _LightLv.
+                mpb.SetVector("_LightLv", nm == "parked_hero" ? new Vector3(1, 1, 0) : Vector3.zero);
                 r.SetPropertyBlock(mpb);
             }
         }
@@ -190,10 +213,22 @@ namespace NeonKaido
             return $"vehicles: {parkedCount} parked, {trafficCount} traffic, {skyCount} sky AVs";
         }
 
+        // Static body box so parked cars are solid (JS vehicles/index.js addParkedCollider);
+        // on enter the same collider becomes the driven car's chassis collider.
+        static void AddCarCollider(ParkedCar rec)
+        {
+            var mf = _models[rec.type].mf;
+            var bc = rec.go.AddComponent<BoxCollider>();
+            bc.size = new Vector3(mf.width * 0.92f, mf.height * 0.80f, mf.length * 0.96f);
+            bc.center = new Vector3(0f, mf.height * 0.43f, 0f);
+            rec.col = bc;
+        }
+
         static int BuildParked(Transform parent)
         {
             var rng = new Mulberry32(90210u);
             int count = 0;
+            _parked = new List<ParkedCar>();
             string[] types = { "hero", "kei", "taxi", "van", "av" };
             string ParkType() { var r = (float)rng.Next(); return r < 0.4 ? "kei" : r < 0.6 ? "taxi" : r < 0.82 ? "van" : "hero"; }
             float avZStart = (float)Layout.AvenueZStart, avZEnd = (float)Layout.AvenueZEnd;
@@ -216,6 +251,9 @@ namespace NeonKaido
                 mpb.SetFloat("_Spin", 0);
                 mpb.SetVector("_LightLv", Vector3.zero);
                 go.GetComponent<MeshRenderer>().SetPropertyBlock(mpb);
+                var rec = new ParkedCar { type = type, name = go.name, go = go };
+                AddCarCollider(rec);
+                _parked.Add(rec);
                 count++;
             }
             for (int si = 0; si < 2; si++)
@@ -259,9 +297,30 @@ namespace NeonKaido
                 mpb.SetFloat("_Spin", 0);
                 mpb.SetVector("_LightLv", new Vector3(1, 1, 0));
                 go.GetComponent<MeshRenderer>().SetPropertyBlock(mpb);
+                var rec = new ParkedCar { type = "hero", name = "parked_hero", go = go };
+                AddCarCollider(rec);
+                _parked.Add(rec);
                 count++;
             }
             return count;
+        }
+
+        // Nearest enterable parked car (JS nearestCar over parked + loose). Distances are
+        // horizontal so the eye-height player position doesn't bias the test.
+        public static ParkedCar NearestParked(Vector3 pos, float maxDist = 4.5f)
+        {
+            if (_parked == null) return null;
+            ParkedCar best = null;
+            float bd = maxDist * maxDist;
+            foreach (var p in _parked)
+            {
+                if (p == null || p.taken || p.go == null) continue;
+                var d = p.go.transform.position - pos;
+                d.y = 0f;
+                float d2 = d.sqrMagnitude;
+                if (d2 < bd) { bd = d2; best = p; }
+            }
+            return best;
         }
 
         // ---------------------------------------------------------------- traffic
@@ -479,6 +538,19 @@ namespace NeonKaido
                 c.go = skT.transform.GetChild(j++).gameObject;
                 c.mpb = new MaterialPropertyBlock();
             }
+            // parked GOs are destroyed by a play-mode scene reload while the static records
+            // survive; child order is creation order, so re-link them positionally.
+            var pkT = GameObject.Find("Vehicles/parked");
+            if (pkT != null && _parked != null)
+            {
+                int k = 0;
+                foreach (var p in _parked)
+                {
+                    if (k >= pkT.transform.childCount) break;
+                    p.go = pkT.transform.GetChild(k++).gameObject;
+                    p.col = p.go.GetComponent<BoxCollider>();
+                }
+            }
             _linked = true;
             return true;
         }
@@ -499,6 +571,83 @@ namespace NeonKaido
             }
             return o;
         }
+
+        // ---------------------------------------------------------------- traffic collision proxies
+        // Port of the 18 kinematic Rapier colliders in index.js: the nearest moving cars get
+        // invisible kinematic boxes so the walking player and the driven car hit them. Keeping
+        // it pooled (rather than 166 bodies) matches the JS budget.
+        const int ProxyN = 18;
+        static GameObject[] _proxyGo;
+        static Rigidbody[] _proxyRb;
+        static BoxCollider[] _proxyCol;
+        static readonly List<Car> _proxyNear = new List<Car>();
+
+        static void EnsureProxies()
+        {
+            if (_proxyGo != null && _proxyGo.Length == ProxyN && _proxyGo[0] != null) return;
+            if (_proxyGo != null)
+                foreach (var g in _proxyGo) if (g != null) Object.Destroy(g);
+            _proxyGo = new GameObject[ProxyN];
+            _proxyRb = new Rigidbody[ProxyN];
+            _proxyCol = new BoxCollider[ProxyN];
+            var parent = new GameObject("traffic_proxies").transform;
+            if (_rootT != null) parent.SetParent(_rootT, false);
+            for (int i = 0; i < ProxyN; i++)
+            {
+                var go = new GameObject("proxy_" + i);
+                go.transform.SetParent(parent, false);
+                var bc = go.AddComponent<BoxCollider>();
+                var rb = go.AddComponent<Rigidbody>();
+                rb.isKinematic = true;
+                rb.useGravity = false;
+                rb.interpolation = RigidbodyInterpolation.None;
+                rb.collisionDetectionMode = CollisionDetectionMode.Discrete;
+                go.SetActive(false);
+                _proxyGo[i] = go; _proxyRb[i] = rb; _proxyCol[i] = bc;
+            }
+        }
+
+        static void UpdateProxies(Vector3 playerPos)
+        {
+            if (_cars == null) return;
+            EnsureProxies();
+            _proxyNear.Clear();
+            float md2 = 60f * 60f;
+            foreach (var c in _cars)
+            {
+                if (c.go == null) continue;
+                if ((c.go.transform.position - playerPos).sqrMagnitude > md2) continue;
+                _proxyNear.Add(c);
+            }
+            _proxyNear.Sort((a, b) =>
+                (a.go.transform.position - playerPos).sqrMagnitude.CompareTo((b.go.transform.position - playerPos).sqrMagnitude));
+            for (int i = 0; i < ProxyN; i++)
+            {
+                var go = _proxyGo[i];
+                if (i < _proxyNear.Count)
+                {
+                    var c = _proxyNear[i];
+                    var mf = _models[c.type].mf;
+                    var bc = _proxyCol[i];
+                    bc.size = new Vector3(mf.width * 0.92f, mf.height * 0.80f, mf.length * 0.96f);
+                    bc.center = new Vector3(0f, mf.height * 0.43f, 0f);
+                    var tr = c.go.transform;
+                    if (!go.activeSelf) go.SetActive(true);
+                    _proxyRb[i].position = tr.position;
+                    _proxyRb[i].rotation = tr.rotation;
+                }
+                else if (go.activeSelf) go.SetActive(false);
+            }
+        }
+
+        // ---------------------------------------------------------------- driven car hooks
+        // The driven car is not in `_cars`, so lights/beams/pools need an explicit extra slot.
+        static GameObject _drivenGo;
+        static string _drivenType;
+        public static GameObject DrivenCar => _drivenGo;
+
+        public static void SetDrivenCar(GameObject go, string type) { _drivenGo = go; _drivenType = type; }
+        public static void ClearDrivenCar() { _drivenGo = null; _drivenType = null; }
 
         public static void Update(float dt, float t, Vector3 playerPos)
         {
@@ -566,6 +715,418 @@ namespace NeonKaido
                 foreach (var c in cars) PlaceCar(c);
             }
             foreach (var c in _sky) PlaceSkyCar(c, t);
+            UpdateProxies(playerPos);
+            PushCarLights(Camera.main);
+            DrawBeams(Camera.main);
+            DrawPools(Camera.main);
+            DrawNavLights();
+        }
+
+        // ---------------------------------------------------------------- AV nav lights
+        static Mesh _navMesh;
+        static Material _navMat;
+        static bool _navInit;
+        static MeshRenderer _navRenderer;
+        static Vector3[] _navVerts;
+        static int _navCount = -1;
+
+        static void EnsureNavAssets()
+        {
+            if (_navInit) return;
+            _navInit = true;
+            var sh = Shader.Find("NEON KAIDO/CarNavLight");
+            if (sh == null) return;
+            _navMat = new Material(sh) { hideFlags = HideFlags.DontSave };
+            var go = new GameObject("car_nav_lights");
+            if (_rootT != null) go.transform.SetParent(_rootT, false);
+            go.AddComponent<MeshFilter>();
+            _navRenderer = go.AddComponent<MeshRenderer>();
+            _navRenderer.sharedMaterial = _navMat;
+            _navRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            _navRenderer.receiveShadows = false;
+            _navMesh = new Mesh { name = "car_nav_lights" };
+            _navMesh.MarkDynamic();
+            go.GetComponent<MeshFilter>().sharedMesh = _navMesh;
+        }
+
+        static void BuildNavMesh(int avCount)
+        {
+            _navCount = avCount;
+            int quads = avCount * 3;
+            _navVerts = new Vector3[quads * 4];
+            var cols = new Color[quads * 4];
+            var uv0 = new Vector2[quads * 4];
+            var uv1 = new Vector2[quads * 4];
+            var tris = new int[quads * 6];
+            var navCols = new[] { new Color(1f, 0.05f, 0.03f), new Color(0.05f, 1f, 0.2f), new Color(1f, 1f, 1f) };
+            var corners = new[] { new Vector2(-0.5f, -0.5f), new Vector2(0.5f, -0.5f), new Vector2(-0.5f, 0.5f), new Vector2(0.5f, 0.5f) };
+            for (int i = 0; i < avCount; i++)
+                for (int k = 0; k < 3; k++)
+                {
+                    int b = (i * 3 + k) * 4;
+                    float phase = (i * 0.61803399f) % 1f;
+                    for (int v = 0; v < 4; v++)
+                    {
+                        cols[b + v] = navCols[k];
+                        uv0[b + v] = corners[v];
+                        uv1[b + v] = new Vector2(k, phase);
+                    }
+                    int ti = (i * 3 + k) * 6;
+                    tris[ti] = b; tris[ti + 1] = b + 1; tris[ti + 2] = b + 2;
+                    tris[ti + 3] = b + 2; tris[ti + 4] = b + 1; tris[ti + 5] = b + 3;
+                }
+            _navMesh.SetVertices(_navVerts);
+            _navMesh.SetColors(cols);
+            _navMesh.SetUVs(0, uv0);
+            _navMesh.SetUVs(1, uv1);
+            _navMesh.SetTriangles(tris, 0);
+            _navMesh.bounds = new Bounds(new Vector3(0f, 80f, 0f), new Vector3(3000f, 400f, 3000f));
+        }
+
+        static void SetNavQuad(ref int vi, Vector3 center)
+        {
+            _navVerts[vi++] = center; _navVerts[vi++] = center;
+            _navVerts[vi++] = center; _navVerts[vi++] = center;
+        }
+
+        static void DrawNavLights()
+        {
+            if (_sky == null || _sky.Count == 0) { if (_navRenderer != null) _navRenderer.enabled = false; return; }
+            EnsureNavAssets();
+            if (_navRenderer == null)
+            {
+                // Vehicles root was rebuilt -> nav GO was destroyed with it
+                _navInit = false;
+                EnsureNavAssets();
+                if (_navRenderer == null) return;
+            }
+            if (_navMat == null || _navMesh == null) return;
+            if (_navCount != _sky.Count || _navVerts == null) BuildNavMesh(_sky.Count);
+            int vi = 0;
+            for (int i = 0; i < _sky.Count; i++)
+            {
+                var c = _sky[i];
+                if (c.go == null) { vi += 12; continue; }
+                var tr = c.go.transform;
+                SetNavQuad(ref vi, tr.TransformPoint(new Vector3(-1.25f, 0.75f, 1.55f)));
+                SetNavQuad(ref vi, tr.TransformPoint(new Vector3(1.25f, 0.75f, 1.55f)));
+                SetNavQuad(ref vi, tr.TransformPoint(new Vector3(0f, 0.95f, -2.62f)));
+            }
+            _navMesh.SetVertices(_navVerts);
+            if (!_navRenderer.enabled) _navRenderer.enabled = true;
+        }
+
+        // ---------------------------------------------------------------- car lamp point lights
+        // Port of lights.js tail/head PointLights: 28 red tail lights (range 7) and
+        // 14 warm head lights (range 16) pooled for the nearest lit ground cars. The
+        // port's materials are custom shaders, so these feed the fake light array in
+        // AtmoCommon.hlsl rather than real Unity lights.
+        static readonly Vector4[] _carLPos = new Vector4[42];
+        static readonly Vector4[] _carLColor = new Vector4[42];
+        static Transform _heroLampT;
+        const float HERO_LEN = 4.958f;
+        // 0xff1208 / 0xffe2c0 converted from sRGB to linear (three.js PointLight colors)
+        static readonly Vector4 TAIL_COL = new Vector4(1f, 0.0031f, 0.0005f, 1f);
+        static readonly Vector4 HEAD_COL = new Vector4(1f, 0.766f, 0.535f, 1f);
+
+        static void PushCarLights(Camera cam)
+        {
+            if (cam == null) return;
+            var camPos = cam.transform.position;
+            int slot = 0, tailN = 0, headN = 0;
+            foreach (var c in _cars)
+            {
+                if (c.go == null) continue;
+                var tr = c.go.transform;
+                if ((tr.position - camPos).sqrMagnitude > 50f * 50f) continue;
+                if (tailN < 28)
+                {
+                    var p = tr.TransformPoint(new Vector3(0f, 0.3f, -(c.len * 0.5f + 1.5f)));
+                    _carLPos[slot] = new Vector4(p.x, p.y, p.z, 7f);
+                    _carLColor[slot] = new Vector4(TAIL_COL.x, TAIL_COL.y, TAIL_COL.z, 0.9f + c.brake * 2.5f);
+                    slot++; tailN++;
+                }
+                if (headN < 14 && slot < 42)
+                {
+                    var p = tr.TransformPoint(new Vector3(0f, 0.7f, c.len * 0.5f + 2.6f));
+                    _carLPos[slot] = new Vector4(p.x, p.y, p.z, 16f);
+                    _carLColor[slot] = new Vector4(HEAD_COL.x, HEAD_COL.y, HEAD_COL.z, 9f);
+                    slot++; headN++;
+                }
+                if (tailN >= 28 && headN >= 14) break;
+            }
+            // the car currently being driven (lights always on, brake gates the tail intensity)
+            if (_drivenGo != null && _drivenType != null && _models.TryGetValue(_drivenType, out var dm))
+            {
+                var tr = _drivenGo.transform;
+                if (tailN < 28 && slot < 42)
+                {
+                    var p = tr.TransformPoint(new Vector3(0f, 0.3f, -(dm.mf.length * 0.5f + 1.5f)));
+                    _carLPos[slot] = new Vector4(p.x, p.y, p.z, 7f);
+                    _carLColor[slot] = new Vector4(TAIL_COL.x, TAIL_COL.y, TAIL_COL.z, 0.9f + NeonKaido.Driving.BrakeLight * 2.5f);
+                    slot++; tailN++;
+                }
+                if (headN < 14 && slot < 42)
+                {
+                    var p = tr.TransformPoint(new Vector3(0f, 0.7f, dm.mf.length * 0.5f + 2.6f));
+                    _carLPos[slot] = new Vector4(p.x, p.y, p.z, 16f);
+                    _carLColor[slot] = new Vector4(HEAD_COL.x, HEAD_COL.y, HEAD_COL.z, 9f);
+                    slot++; headN++;
+                }
+            }
+            // the spawn-kerb hero keeps its head + tail lamps on in normal play
+            if (_heroLampT == null) { var h = GameObject.Find("parked_hero"); if (h != null) _heroLampT = h.transform; }
+            if (_heroLampT != null && (_drivenGo == null || _heroLampT.gameObject != _drivenGo))
+            {
+                float d2 = (_heroLampT.position - camPos).sqrMagnitude;
+                if (d2 < 140f * 140f)
+                {
+                    if (tailN < 28 && slot < 42)
+                    {
+                        var p = _heroLampT.TransformPoint(new Vector3(0f, 0.3f, -(HERO_LEN * 0.5f + 1.5f)));
+                        _carLPos[slot] = new Vector4(p.x, p.y, p.z, 7f);
+                        _carLColor[slot] = new Vector4(TAIL_COL.x, TAIL_COL.y, TAIL_COL.z, 0.9f);
+                        slot++;
+                    }
+                    if (headN < 14 && slot < 42)
+                    {
+                        var p = _heroLampT.TransformPoint(new Vector3(0f, 0.7f, HERO_LEN * 0.5f + 2.6f));
+                        _carLPos[slot] = new Vector4(p.x, p.y, p.z, 16f);
+                        _carLColor[slot] = new Vector4(HEAD_COL.x, HEAD_COL.y, HEAD_COL.z, 9f);
+                        slot++;
+                    }
+                }
+            }
+            Shader.SetGlobalFloat("_CarLCount", slot);
+            Shader.SetGlobalVectorArray("_CarLPos", _carLPos);
+            Shader.SetGlobalVectorArray("_CarLColor", _carLColor);
+        }
+
+        // ---------------------------------------------------------------- headlight beams
+        // Port of lights.js `beams`: two merged open cones (apex at the lamps, opening
+        // forward, ~3.4 deg down), drawn per lit moving car through an additive shader.
+        // JS fades by (1 - facing)^3 so a car coming at the camera doesn't plaster a blob.
+        static Mesh _beamMesh;
+        static Material _beamMat;
+        static bool _beamInit;
+        static List<GameObject> _beamPool;
+        static List<MeshRenderer> _beamRenderers;
+        static List<MaterialPropertyBlock> _beamBlocks;
+
+        static void EnsureBeamAssets()
+        {
+            if (_beamInit) return;
+            _beamInit = true;
+            var sh = Shader.Find("NEON KAIDO/CarLightBeam");
+            if (sh == null) return;
+            _beamMat = new Material(sh) { hideFlags = HideFlags.DontSave };
+            _beamMat.SetColor("_BeamColor", new Color(1.0f, 0.86f, 0.66f));
+
+            const int seg = 20;
+            const float radius = 2.4f, len = 14f, tilt = 0.06f;
+            var rot = Quaternion.Euler(tilt * Mathf.Rad2Deg, 0f, 0f);
+            var verts = new List<Vector3>(2 * seg * 3);
+            var nors = new List<Vector3>(2 * seg * 3);
+            var uvs = new List<Vector2>(2 * seg * 3);
+            var tris = new List<int>(2 * seg * 3);
+            for (int s = 0; s < 2; s++)
+            {
+                float ox = s == 0 ? -0.62f : 0.62f;
+                for (int i = 0; i < seg; i++)
+                {
+                    float a0 = i / (float)seg * Mathf.PI * 2f;
+                    float a1 = (i + 1) / (float)seg * Mathf.PI * 2f;
+                    var n0 = new Vector3(Mathf.Cos(a0), Mathf.Sin(a0), 0f);
+                    var n1 = new Vector3(Mathf.Cos(a1), Mathf.Sin(a1), 0f);
+                    int b = verts.Count;
+                    verts.Add(rot * new Vector3(ox, 0f, 0f));
+                    nors.Add(rot * (n0 + n1).normalized);
+                    uvs.Add(new Vector2(0.5f, 1f));
+                    verts.Add(rot * new Vector3(n0.x * radius + ox, n0.y * radius, len));
+                    nors.Add(rot * n0);
+                    uvs.Add(new Vector2(i / (float)seg, 0f));
+                    verts.Add(rot * new Vector3(n1.x * radius + ox, n1.y * radius, len));
+                    nors.Add(rot * n1);
+                    uvs.Add(new Vector2((i + 1) / (float)seg, 0f));
+                    tris.Add(b); tris.Add(b + 2); tris.Add(b + 1);
+                }
+            }
+            var m = new Mesh { name = "car_light_beam" };
+            m.SetVertices(verts); m.SetNormals(nors); m.SetUVs(0, uvs); m.SetTriangles(tris, 0);
+            m.RecalculateBounds();
+            _beamMesh = m;
+
+            // pooled renderers rather than Graphics.DrawMesh: HDRP renders MeshRenderers
+            // through the same transparent pass as the rest of the custom shaders.
+            const int cap = 48;
+            _beamPool = new List<GameObject>(cap);
+            _beamRenderers = new List<MeshRenderer>(cap);
+            _beamBlocks = new List<MaterialPropertyBlock>(cap);
+            var parent = new GameObject("car_beams").transform;
+            if (_rootT != null) parent.SetParent(_rootT, false);
+            for (int i = 0; i < cap; i++)
+            {
+                var go = new GameObject("beam_" + i);
+                go.transform.SetParent(parent, false);
+                go.AddComponent<MeshFilter>().sharedMesh = _beamMesh;
+                var r = go.AddComponent<MeshRenderer>();
+                r.sharedMaterial = _beamMat;
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                r.receiveShadows = false;
+                go.SetActive(false);
+                _beamPool.Add(go);
+                _beamRenderers.Add(r);
+                _beamBlocks.Add(new MaterialPropertyBlock());
+            }
+        }
+
+        // ---------------------------------------------------------------- headlight ground pools
+        static Mesh _poolMesh;
+        static Material _poolMat;
+        static bool _poolInit;
+        static List<GameObject> _poolPool;
+        static List<MeshRenderer> _poolRenderers;
+        static List<MaterialPropertyBlock> _poolBlocks;
+
+        static void EnsurePoolAssets()
+        {
+            if (_poolInit) return;
+            _poolInit = true;
+            var sh = Shader.Find("NEON KAIDO/CarLightPool");
+            if (sh == null) return;
+            _poolMat = new Material(sh) { hideFlags = HideFlags.DontSave };
+            _poolMat.SetColor("_PoolColor", new Color(1f, 0.88f, 0.70f));
+
+            // PlaneGeometry(5.5, 11).rotateX(-90).translate(0, 0.03, -7.5) in JS car space;
+            // ours extends along +Z (Unity car forward).
+            const float hw = 2.75f, hl = 5.5f, zc = 7.5f, y = 0.03f;
+            var m = new Mesh { name = "car_light_pool" };
+            m.SetVertices(new List<Vector3> {
+                new Vector3(-hw, y, zc - hl), new Vector3(hw, y, zc - hl),
+                new Vector3(-hw, y, zc + hl), new Vector3(hw, y, zc + hl) });
+            m.SetUVs(0, new List<Vector2> { new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 1), new Vector2(1, 1) });
+            m.SetTriangles(new int[] { 0, 2, 1, 1, 2, 3 }, 0);
+            m.RecalculateBounds();
+            _poolMesh = m;
+
+            const int cap = 48;
+            _poolPool = new List<GameObject>(cap);
+            _poolRenderers = new List<MeshRenderer>(cap);
+            _poolBlocks = new List<MaterialPropertyBlock>(cap);
+            var parent = new GameObject("car_pools").transform;
+            if (_rootT != null) parent.SetParent(_rootT, false);
+            for (int i = 0; i < cap; i++)
+            {
+                var go = new GameObject("pool_" + i);
+                go.transform.SetParent(parent, false);
+                go.AddComponent<MeshFilter>().sharedMesh = _poolMesh;
+                var r = go.AddComponent<MeshRenderer>();
+                r.sharedMaterial = _poolMat;
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                r.receiveShadows = false;
+                go.SetActive(false);
+                _poolPool.Add(go);
+                _poolRenderers.Add(r);
+                _poolBlocks.Add(new MaterialPropertyBlock());
+            }
+        }
+
+        static void DrawPools(Camera cam)
+        {
+            if (cam == null) return;
+            EnsurePoolAssets();
+            if (_poolMat == null || _poolMesh == null || _cars == null) return;
+            if (_poolPool == null || _poolPool.Count == 0 || _poolPool[0] == null)
+            {
+                _poolInit = false;
+                EnsurePoolAssets();
+                if (_poolPool == null || _poolPool.Count == 0) return;
+            }
+            var camPos = cam.transform.position;
+            int used = 0;
+            foreach (var c in _cars)
+            {
+                if (c.go == null) continue;
+                var tr = c.go.transform;
+                if ((tr.position - camPos).sqrMagnitude > 160f * 160f) continue;
+                if (used >= _poolPool.Count) break;
+                var origin = tr.TransformPoint(new Vector3(0f, 0f, c.len * 0.5f));
+                var go = _poolPool[used];
+                go.transform.SetPositionAndRotation(origin, tr.rotation);
+                _poolBlocks[used].SetFloat("_Intensity", 1f);
+                _poolRenderers[used].SetPropertyBlock(_poolBlocks[used]);
+                if (!go.activeSelf) go.SetActive(true);
+                used++;
+            }
+            if (_drivenGo != null && _drivenType != null && _models.TryGetValue(_drivenType, out var dm) && used < _poolPool.Count)
+            {
+                var tr = _drivenGo.transform;
+                var origin = tr.TransformPoint(new Vector3(0f, 0f, dm.mf.length * 0.5f));
+                var go = _poolPool[used];
+                go.transform.SetPositionAndRotation(origin, tr.rotation);
+                _poolBlocks[used].SetFloat("_Intensity", 1f);
+                _poolRenderers[used].SetPropertyBlock(_poolBlocks[used]);
+                if (!go.activeSelf) go.SetActive(true);
+                used++;
+            }
+            for (int i = used; i < _poolPool.Count; i++)
+                if (_poolPool[i].activeSelf) _poolPool[i].SetActive(false);
+        }
+
+        static void DrawBeams(Camera cam)
+        {
+            if (cam == null) return;
+            EnsureBeamAssets();
+            if (_beamMat == null || _beamMesh == null || _cars == null) return;
+            if (_beamPool == null || _beamPool.Count == 0 || _beamPool[0] == null)
+            {
+                // Vehicles root was rebuilt (domain reload / scene reload) -> re-pool
+                _beamInit = false;
+                EnsureBeamAssets();
+                if (_beamPool == null || _beamPool.Count == 0) return;
+            }
+            var camPos = cam.transform.position;
+            int used = 0;
+            foreach (var c in _cars)
+            {
+                if (c.go == null) continue;
+                var mf = _models[c.type].mf;
+                var origin = c.go.transform.TransformPoint(new Vector3(0f, mf.height * 0.42f + 0.05f, c.len * 0.5f - 0.1f));
+                var toCam = camPos - origin;
+                float d = toCam.magnitude;
+                if (d > 160f || d < 0.01f) continue;
+                float facing = Mathf.Max(0f, Vector3.Dot(c.go.transform.forward, toCam / d));
+                float k = Mathf.Pow(1f - facing, 3f);
+                if (k < 0.02f) continue;
+                if (used >= _beamPool.Count) break;
+                var go = _beamPool[used];
+                go.transform.SetPositionAndRotation(origin, c.go.transform.rotation);
+                _beamBlocks[used].SetFloat("_Intensity", k);
+                _beamRenderers[used].SetPropertyBlock(_beamBlocks[used]);
+                if (!go.activeSelf) go.SetActive(true);
+                used++;
+            }
+            // the driven car's own cones (JS mixes spotCar into the visible car list)
+            if (_drivenGo != null && _drivenType != null && _models.TryGetValue(_drivenType, out var dm) && used < _beamPool.Count)
+            {
+                var mf = dm.mf;
+                var origin = _drivenGo.transform.TransformPoint(new Vector3(0f, mf.height * 0.42f + 0.05f, mf.length * 0.5f - 0.1f));
+                var toCam = camPos - origin;
+                float d = toCam.magnitude;
+                if (d > 0.01f)
+                {
+                    float facing = Mathf.Max(0f, Vector3.Dot(_drivenGo.transform.forward, toCam / d));
+                    float k = Mathf.Pow(1f - facing, 3f);
+                    var go = _beamPool[used];
+                    go.transform.SetPositionAndRotation(origin, _drivenGo.transform.rotation);
+                    _beamBlocks[used].SetFloat("_Intensity", k);
+                    _beamRenderers[used].SetPropertyBlock(_beamBlocks[used]);
+                    if (!go.activeSelf) go.SetActive(true);
+                    used++;
+                }
+            }
+            for (int i = used; i < _beamPool.Count; i++)
+                if (_beamPool[i].activeSelf) _beamPool[i].SetActive(false);
         }
 
 

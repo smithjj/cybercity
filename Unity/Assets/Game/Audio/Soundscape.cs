@@ -141,6 +141,9 @@ namespace NeonKaido
         static double[] _sirenSpawn;
         // music
         static AudioSource _music;
+        // driven car (drive.js engine loop: engineLow/engineHigh pitch + gains, tire hiss, rain on the roof)
+        static AudioSource _engLow, _engHigh, _tireCar;
+        static float _carRpm = 850f, _carSpeed;
         // candidates
         static List<Vector3> _neonPts = new List<Vector3>(), _vendPts = new List<Vector3>(),
             _shopPts = new List<Vector3>(), _gutterPts = new List<Vector3>();
@@ -172,7 +175,7 @@ namespace NeonKaido
             lpf.cutoffFrequency = 3500f;
             _babble.Play();
             _metalPatter = AudioBus.MakeSource("metalPatter", true, 0f, 120f, root); _metalPatter.Play();
-            _carRoof = AudioBus.MakeSource("carRoof", false, 0f, parent: root); _carRoof.Play(); // no drivable car yet; stays at 0
+            _carRoof = AudioBus.MakeSource("carRoof", false, 0f, parent: root); _carRoof.Play();
 
             _neon = new EmitterPool("neonA", 4, 45f, 0.5f, true, "neonB");
             _vending = new EmitterPool("vending", 2, 30f, 0.5f);
@@ -464,6 +467,61 @@ namespace NeonKaido
 
         static (bool Moving, double NextAt, double T0, double Dur, float Speed, int Dir)[] _trainState =
             new (bool, double, double, double, float, int)[2];
+
+        // ---------------------------------------------------------------- driven car
+        // Port of soundscape.js updateEngine: 6-speed gearbox on wheel rpm, low/high engine
+        // layers cross-faded by rpm, tyre hiss by speed, rain on the roof while inside.
+        public static void CarEngine(bool inCar, float speed, float throttle, Vector3 pos, float dt)
+        {
+            if (!Built) return;
+            if (_engLow == null)
+            {
+                if (!AudioBus.Clips.ContainsKey("engineLow") || !AudioBus.Clips.ContainsKey("engineHigh")) return;
+                _engLow = AudioBus.MakeSource("engineLow", true, 0f, 120f, AudioBus.Root.transform);
+                _engHigh = AudioBus.MakeSource("engineHigh", true, 0f, 120f, AudioBus.Root.transform);
+                _engLow.Play(); _engHigh.Play();
+                if (AudioBus.Clips.ContainsKey("tireHiss"))
+                {
+                    _tireCar = AudioBus.MakeSource("tireHiss", true, 0f, 80f, AudioBus.Root.transform);
+                    _tireCar.Play();
+                }
+            }
+            if (!inCar)
+            {
+                AudioBus.SetVol(_engLow, 0f, 0.25f, dt);
+                AudioBus.SetVol(_engHigh, 0f, 0.25f, dt);
+                if (_tireCar != null) AudioBus.SetVol(_tireCar, 0f, 0.25f, dt);
+                AudioBus.SetVol(_carRoof, 0f, 0.25f, dt);
+                _carSpeed = 0f; _carRpm = 850f;
+                return;
+            }
+
+            _carSpeed += (speed - _carSpeed) * Mathf.Min(1f, dt * 5f);
+            float v = _carSpeed;
+            // JS gearbox: ratios 3.4/2.2/1.6/1.25/1.0/0.82 on wheel rpm
+            float[] ratios = { 0f, 3.4f, 2.2f, 1.6f, 1.25f, 1.0f, 0.82f };
+            int gear = Mathf.Clamp(1 + Mathf.FloorToInt(v * 3.6f / 34f), 1, 6);
+            float wheelRpm = (v / (2f * Mathf.PI * 0.34f)) * 60f * 3.6f;
+            float rpm = Mathf.Clamp(wheelRpm * ratios[gear], 850f, 7200f);
+            _carRpm += (rpm - _carRpm) * Mathf.Min(1f, dt * 6f);
+            float rate = Mathf.Clamp(_carRpm / 2000f, 0.55f, 2.8f);
+            float hi = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(2200f, 5200f, _carRpm)) * (0.35f + 0.65f * Mathf.Clamp01(throttle));
+
+            _engLow.pitch = rate;
+            _engHigh.pitch = rate;
+            _engLow.transform.position = pos;
+            _engHigh.transform.position = pos;
+            AudioBus.SetVol(_engLow, 0.55f * (1f - 0.6f * hi), 0.08f, dt);
+            AudioBus.SetVol(_engHigh, 0.50f * hi, 0.08f, dt);
+
+            if (_tireCar != null)
+            {
+                _tireCar.transform.position = pos;
+                AudioBus.SetVol(_tireCar, 0.32f * Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.5f, 35f, v)), 0.1f, dt);
+            }
+            float rain = WeatherDriver.Built ? WeatherDriver.RainNow : 0f;
+            AudioBus.SetVol(_carRoof, 0.55f * Mathf.Pow(Mathf.Clamp01(rain), 1.1f), 0.2f, dt);
+        }
 
         public static void ToggleMusic()
         {

@@ -26,6 +26,7 @@ namespace NeonKaido
         // styles
         static Texture2D _white;
         static GUIStyle _mono10, _tinyC, _tinyR, _lblBig, _lblSm, _numBig, _numLg, _amber, _cyan, _whiteTxt, _titleA, _districtName, _districtArea;
+        static GUIStyle _speedNum, _speedLbl;
 
         static float Z => Mathf.Clamp(Screen.height / 1080f, 0.55f, 2.2f);
 
@@ -140,6 +141,7 @@ namespace NeonKaido
             DrawDistrict(zoom);
             DrawToasts(zoom);
             DrawBottom(pc, zoom);
+            if (NeonKaido.Driving.Active) DrawVehicle(pc, zoom);
         }
 
         static Vector3 TargetWorld(Gigs gigs, GigDef g)
@@ -575,6 +577,7 @@ namespace NeonKaido
         // ----------------------------------------------------------------
         static void DrawCrosshair(PlayerController pc, float z)
         {
+            if (NeonKaido.Driving.Active) return;
             var fly = pc != null && !pc.WalkMode;
             if (fly) return;
             float cx = Screen.width / 2f, cy = Screen.height / 2f;
@@ -589,11 +592,21 @@ namespace NeonKaido
 
         static void DrawPrompt(float z)
         {
+            string pKey, pText, pTag;
             var p = Gameplay.Prompt;
-            if (p == null) return;
+            if (p != null)
+            {
+                pKey = p.Value.Key; pText = p.Value.Text; pTag = "INTERACT";
+            }
+            else if (NeonKaido.Driving.Prompt != null)
+            {
+                pKey = "F"; pText = NeonKaido.Driving.Prompt;
+                pTag = NeonKaido.Driving.PromptName ?? "VEHICLE";
+            }
+            else return;
             float cx = Screen.width / 2f + 70 * z, cy = Screen.height / 2f + 36 * z;
             _mono10.fontSize = (int)(10 * z); _mono10.normal.textColor = A(KC, 0.7f);
-            Label(new Rect(cx, cy, 240 * z, 14 * z), "INTERACT", _mono10);
+            Label(new Rect(cx, cy, 320 * z, 14 * z), pTag, _mono10);
             // amber opt row: key chip + text
             var rowH = 36 * z;
             RowAccent(new Rect(cx - 10 * z, cy + 16 * z, 300 * z, rowH));
@@ -601,10 +614,10 @@ namespace NeonKaido
             var old = _mono10.fontSize;
             _mono10.fontSize = (int)(13 * z); _mono10.alignment = TextAnchor.MiddleCenter; _mono10.fontStyle = FontStyle.Bold;
             _mono10.normal.textColor = new Color(0.07f, 0.04f, 0f);
-            Label(key, p.Value.Key, _mono10);
+            Label(key, pKey, _mono10);
             _mono10.alignment = TextAnchor.UpperLeft; _mono10.fontStyle = FontStyle.Normal;
             _mono10.normal.textColor = new Color(0.07f, 0.04f, 0f); _mono10.fontSize = (int)(16 * z);
-            Label(new Rect(cx + 30 * z, cy + 24 * z, 250 * z, 26 * z), p.Value.Text, _mono10);
+            Label(new Rect(cx + 30 * z, cy + 24 * z, 250 * z, 26 * z), pText, _mono10);
             _mono10.fontSize = old;
         }
 
@@ -716,14 +729,16 @@ namespace NeonKaido
             float x = 34 * z, y = Screen.height - 30 * z - 54 * z;
             var fly = pc != null && !pc.WalkMode;
             Slot(x, y, fly, "V", "VIEW");
-            Slot(x + 62 * z, y, Gameplay.Prompt.HasValue && Gameplay.Prompt.Value.Key == "F", "F", "VEHICLE");
+            Slot(x + 62 * z, y, NeonKaido.Driving.Active || NeonKaido.Driving.Prompt != null
+                || (Gameplay.Prompt.HasValue && Gameplay.Prompt.Value.Key == "F"), "F",
+                NeonKaido.Driving.Active ? "EXIT" : "VEHICLE");
             Slot(x + 124 * z, y, !Enabled, "H", "HUD");
             y += 64 * z;
             _tinyC2().fontSize = (int)(10 * z); _tinyC2().normal.textColor = A(KR, 0.65f);
             Label(new Rect(x, y + 4 * z, 480 * z, 14 * z), "CONNECTION 2077.11.04 · NODE KBK-09 · " + _fpsShown + " FPS", _tinyC2());
 
             // stance (bottom-right)
-            if (pc != null && pc.WalkMode)
+            if (pc != null && pc.WalkMode && !NeonKaido.Driving.Active)
             {
                 string kind = pc.Crouched ? "CROUCHED · STEALTH" : pc.SprintGait ? "SPRINTING" : "STANDING";
                 var c = pc.Crouched ? KC : KR;
@@ -734,6 +749,48 @@ namespace NeonKaido
                 StanceIcon(Screen.width - 44 * z, Screen.height - 44 * z, c, pc.Crouched, z);
                 st.alignment = TextAnchor.UpperLeft;
             }
+        }
+
+        // Bottom-right driving cluster: car name, km/h, gear, speed bar, key hints.
+        static void DrawVehicle(PlayerController pc, float z)
+        {
+            float x = Screen.width - 34 * z;
+            float y = Screen.height - 34 * z;
+            float barW = 300 * z;
+
+            _tinyC.fontSize = (int)(10 * z);
+            _tinyC.alignment = TextAnchor.MiddleRight;
+            _tinyC.normal.textColor = A(KC, 0.6f);
+            Label(new Rect(x - 470 * z, y - 14 * z, 470 * z, 14 * z),
+                "F EXIT   ·   R RESET   ·   SPACE HANDBRAKE", _tinyC);
+
+            _cyan.fontSize = (int)(13 * z);
+            _cyan.alignment = TextAnchor.MiddleRight;
+            _cyan.normal.textColor = A(KW, 0.92f);
+            Label(new Rect(x - barW, y - 148 * z, barW, 18 * z),
+                NeonKaido.Driving.CarName ?? "VEHICLE", _cyan);
+
+            _speedNum.fontSize = (int)(62 * z);
+            Label(new Rect(x - barW, y - 134 * z, barW, 72 * z),
+                Mathf.RoundToInt(NeonKaido.Driving.SpeedKmh).ToString("0"), _speedNum);
+
+            _speedLbl.fontSize = (int)(12 * z);
+            Label(new Rect(x - barW, y - 60 * z, barW, 16 * z), "KM/H", _speedLbl);
+
+            var gr = new Rect(x - barW - 58 * z, y - 126 * z, 48 * z, 48 * z);
+            Fill(gr, A(KY, 0.10f)); Border(gr, A(KY, 0.85f), 1);
+            _numBig.fontSize = (int)(26 * z); _numBig.normal.textColor = KY;
+            Label(new Rect(gr.x, gr.y + 7 * z, gr.width, 30 * z),
+                NeonKaido.Driving.Reverse ? "R" : NeonKaido.Driving.Gear.ToString(), _numBig);
+            _numBig.normal.textColor = KC;
+
+            var back = new Rect(x - barW, y - 42 * z, barW, 3 * z);
+            Fill(back, A(KC, 0.18f));
+            float k = Mathf.Clamp01(NeonKaido.Driving.SpeedKmh / 220f);
+            Fill(new Rect(x - barW, y - 42 * z, barW * k, 3 * z), KY);
+
+            _cyan.alignment = TextAnchor.UpperLeft;
+            _tinyC.alignment = TextAnchor.UpperLeft;
         }
 
         static void Slot(float x, float y, bool act, string key, string lb)
@@ -817,6 +874,8 @@ namespace NeonKaido
             _titleA = MakeFS(21, KY, FontStyle.Bold);
             _districtName = MakeFS(58, KW, FontStyle.Bold, TextAnchor.MiddleCenter);
             _districtArea = MakeFS(22, KY, FontStyle.Bold, TextAnchor.MiddleCenter);
+            _speedNum = MakeFS(62, KY, FontStyle.Bold, TextAnchor.MiddleRight);
+            _speedLbl = MakeFS(12, A(KC, 0.85f), FontStyle.Normal, TextAnchor.MiddleRight);
         }
     }
 }

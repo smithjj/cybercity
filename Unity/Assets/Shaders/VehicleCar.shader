@@ -2,8 +2,8 @@
 // material per car, parts tagged per vertex (uv1.x: 0=paint 1=glass 2=chrome/
 // trim 3=headlamp 4=taillight). Wheels: uv1.y=1, axle center (y,z) baked in
 // uv2 — vertex shader spins each wheel around its axle by _Spin.
-// Per-car via MaterialPropertyBlock: _PaintColor, _Spin, _LightLv (x=headlamp
-// on, z=brake lamp intensity).
+// Per-car via MaterialPropertyBlock: _PaintColor, _Spin, _LightLv (x=headlamp on,
+// y=tail/position lamps on, z=brake lamp intensity).
 Shader "NEON KAIDO/VehicleCar"
 {
     SubShader
@@ -48,7 +48,7 @@ Shader "NEON KAIDO/VehicleCar"
                 float4 uv1 : TEXCOORD1; float4 uv2 : TEXCOORD2; };
             struct Varyings { float4 posCS : SV_POSITION;
                 float2 screenUV : TEXCOORD9; float3 worldPos : TEXCOORD0; float3 nor : TEXCOORD2;
-                float tag : TEXCOORD3; float wheel : TEXCOORD4; };
+                float tag : TEXCOORD3; float wheel : TEXCOORD4; float3 localPos : TEXCOORD5; };
 
             Varyings vert(Attributes IN)
             {
@@ -63,9 +63,17 @@ Shader "NEON KAIDO/VehicleCar"
                     lp.y = IN.uv2.x + dy * ca - dz * sa;
                     lp.z = IN.uv2.y + dy * sa + dz * ca;
                 }
-                o.posCS = NkClip(lp.xyz);
+                // Cars are GameObjects with their own transform, so the clip position MUST use
+                // the world position. Clipping the (wheel-spun) object-space position drew every
+                // parked/traffic car at the world origin — the "glow truck in the road".
+                // headlamp plates are modelled a few cm inside the nose on van/kei/taxi,
+                // so the fascia occludes the lens. Push the head tag out to sit on the nose.
+                if (IN.uv1.x > 2.5 && IN.uv1.x < 3.5) lp.z += 0.10;
+                float3 wp = NkWorld(lp.xyz);
+                o.posCS = NkClip(wp);
                 o.screenUV = o.posCS.xy / o.posCS.w * 0.5 + 0.5;
-                o.worldPos = NkWorld(lp.xyz);
+                o.worldPos = wp;
+                o.localPos = lp.xyz;
                 o.nor = normalize(mul((float3x3)unity_ObjectToWorld, IN.nor));
                 o.tag = IN.uv1.x;
                 o.wheel = IN.uv1.y;
@@ -119,10 +127,20 @@ Shader "NEON KAIDO/VehicleCar"
                            + _SkyLightColor.xyz * (ndl * c + spec * 0.25)
                            + env * envMix * (0.35 + fres * 0.65);
 
-                // lamps
-                float head = step(3.5, tag) * step(tag, 3.5) * _LightLv.x;
-                float tail = step(4.5, tag) * (0.35 + _LightLv.z);
-                oCol += float3(1.0, 0.95, 0.85) * head * 14.0 + float3(1.0, 0.12, 0.05) * tail * 9.0;
+                // Lamps. Baked tags are the INTEGERS 0=paint 1=glass 2=trim 3=head 4=tail, so the
+                // tags must be tested as ranges: step(3.5,tag)*step(tag,3.5) is true only at exactly
+                // 3.5 and step(4.5,tag) is never true -> both lamps were dead. Matches JS
+                // materials.js makeHeadLight/makeTailLight: head = L.x * 38, tail = (L.y*3.2 + L.z*11)
+                // with an LED segment pattern along car-local X.
+                float isHead = step(2.5, tag) * (1.0 - step(3.5, tag));
+                float isTail = step(3.5, tag);
+                float tailLvl = isTail * (_LightLv.y * 3.2 + _LightLv.z * 11.0);
+                float seg = smoothstep(0.0, 0.25, frac(IN.localPos.x * 55.0))
+                          * smoothstep(1.0, 0.75, frac(IN.localPos.x * 55.0));
+                float led = seg * 0.35 + 0.65;
+                oCol += float3(0.86, 0.93, 1.0) * (isHead * _LightLv.x * 38.0);
+                oCol += float3(1.0, 0.035, 0.02) * (tailLvl * led)
+                      + float3(0.5, 0.02, 0.02) * pow(tailLvl * led * 0.08, 2.0);
 
                 oCol += NkBPointLights(N, wp, V, c, oRough, 0, 1);
 

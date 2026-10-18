@@ -198,15 +198,25 @@ namespace NeonKaido
         void Update()
         {
             float t = (float)(Time.timeSinceLevelLoadAsDouble % 3600.0);
+            float dt = Mathf.Min(Time.deltaTime, 0.05f);
             double td = Time.timeAsDouble % 86400.0;
             Shader.SetGlobalFloat("_SimTime", t);
             NeonKaido.Atmo.PushGlobals();
-            NeonKaido.VehicleTraffic.Update(Time.deltaTime, t, transform.position);
-            NeonKaido.WeatherDriver.Update(Time.deltaTime, t, transform.position);
-            NeonKaido.Crowd.Update(Time.deltaTime, t, transform.position);
-            NeonKaido.Gameplay.Update(Time.deltaTime, t, transform.position);
-            if (Input.GetKeyDown(KeyCode.F)) NeonKaido.Gameplay.TakeLift();
-            NeonKaido.Soundscape.Update(Time.deltaTime, td);
+            // while driving the camera is the player root, so the world systems need the car as focus
+            var focus = NeonKaido.Driving.Active ? NeonKaido.Driving.CarPosition : transform.position;
+            NeonKaido.VehicleTraffic.Update(dt, t, focus);
+            NeonKaido.WeatherDriver.Update(dt, t, focus);
+            NeonKaido.Crowd.Update(dt, t, focus);
+            NeonKaido.Gameplay.Update(dt, t, focus);
+            if (Input.GetKeyDown(KeyCode.F))
+            {
+                // prompt priority matches JS: vehicle > gig lift? No — the gig prompt wins when present,
+                // but exiting a car always takes F while driving.
+                if (NeonKaido.Driving.Active) NeonKaido.Driving.Exit(this);
+                else if (NeonKaido.Gameplay.Prompt.HasValue && NeonKaido.Gameplay.Prompt.Value.Key == "F") NeonKaido.Gameplay.TakeLift();
+                else if (!NeonKaido.Driving.TryEnter(this)) NeonKaido.Gameplay.TakeLift();
+            }
+            NeonKaido.Soundscape.Update(dt, td);
             if (Input.GetKeyDown(KeyCode.M)) NeonKaido.Soundscape.ToggleMusic();
             for (int i = 0; i < NeonKaido.FacadeSigns.FlickerL.Count; i++)
             {
@@ -218,15 +228,23 @@ namespace NeonKaido
             NeonKaido.Koi.Update(td);
             NeonKaido.Trains.Update(td);
 
-            if (Input.GetKeyDown(KeyCode.V)) { WalkMode = !WalkMode; _locked = false; }
+            if (!NeonKaido.Driving.Active && Input.GetKeyDown(KeyCode.V)) { WalkMode = !WalkMode; _locked = false; }
             if (Input.GetKeyDown(KeyCode.H)) NeonKaido.GameplayHud.Toggle();
             if (Input.GetKeyDown(KeyCode.F8)) DumpEyeBand();
             if (Input.GetKeyDown(KeyCode.R))
             {
-                NeonKaido.WeatherDriver.RainOverride = NeonKaido.WeatherDriver.RainOverride >= 0f ? -1f : 0f;
-                bool clear = NeonKaido.WeatherDriver.RainOverride >= 0f;
-                NeonKaido.GameplayHud.Note(clear ? "RAIN: OFF" : "RAIN: STORM",
-                    clear ? "CLOUD SEEDERS HOLDING // SKIES CLEARING" : "STORM RESUMING // WET GROUND");
+                if (NeonKaido.Driving.Active)
+                {
+                    NeonKaido.Driving.Reset();
+                    NeonKaido.GameplayHud.Note("VEHICLE RECOVERED", "CHASSIS RE-SEATED // DRIVETRAIN READY");
+                }
+                else
+                {
+                    NeonKaido.WeatherDriver.RainOverride = NeonKaido.WeatherDriver.RainOverride >= 0f ? -1f : 0f;
+                    bool clear = NeonKaido.WeatherDriver.RainOverride >= 0f;
+                    NeonKaido.GameplayHud.Note(clear ? "RAIN: OFF" : "RAIN: STORM",
+                        clear ? "CLOUD SEEDERS HOLDING // SKIES CLEARING" : "STORM RESUMING // WET GROUND");
+                }
             }
             if (Input.GetKeyDown(KeyCode.F10)) CycleAntiAliasing();
 
@@ -239,16 +257,24 @@ namespace NeonKaido
             {
                 if (Input.GetMouseButtonDown(0)) { Cursor.lockState = CursorLockMode.Locked; Cursor.visible = false; _locked = true; }
             }
-            else
+            else if (!NeonKaido.Driving.Active)
             {
                 Yaw += Input.GetAxis("Mouse X") * 0.15f;   // +yaw turns right in Unity (Euler Y CW from above)
                 Pitch = Mathf.Clamp(Pitch - Input.GetAxis("Mouse Y") * 0.15f, -1.45f, 1.45f); // +Euler X pitches down, so subtract for look-up
                 _lookLag += Input.GetAxis("Mouse X") * 0.0021f;
             }
 
-            float dt = Mathf.Min(Time.deltaTime, 0.05f);
-            if (WalkMode) StepWalk(dt, t);
-            else StepFly(dt);
+            if (NeonKaido.Driving.Active)
+            {
+                _cc.enabled = false;
+                NeonKaido.Driving.UpdateDriving(dt, this);
+            }
+            else
+            {
+                if (WalkMode) StepWalk(dt, t);
+                else StepFly(dt);
+                NeonKaido.Driving.UpdateIdle(this);
+            }
         }
 
         void StepFly(float dt)
@@ -405,7 +431,8 @@ namespace NeonKaido
 
         void OnGUI()
         {
-            NeonKaido.GameplayHud.Draw(NeonKaido.Gameplay.Gigs, transform.position);
+            var feet = NeonKaido.Driving.Active ? NeonKaido.Driving.CarPosition : transform.position;
+            NeonKaido.GameplayHud.Draw(NeonKaido.Gameplay.Gigs, feet);
         }
 
         void OnApplicationFocus(bool focus)
