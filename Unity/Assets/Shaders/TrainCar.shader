@@ -55,9 +55,13 @@ Shader "NEON KAIDO/TrainCar"
             Varyings vert(Attributes IN)
             {
                 Varyings o;
-                o.posCS = NkClip(IN.pos.xyz);
+                // Train cars are moved by Transform every frame — clip on the WORLD
+                // position. Using IN.pos put every train car at the world origin
+                // (the "train in the road" apparition).
+                float3 wp = NkWorld(IN.pos.xyz);
+                o.posCS = NkClip(wp);
                 o.screenUV = o.posCS.xy / o.posCS.w * 0.5 + 0.5;
-                o.worldPos = NkWorld(IN.pos.xyz);
+                o.worldPos = wp;
                 o.localPos = IN.pos.xyz;
                 o.nor = normalize(mul((float3x3)unity_ObjectToWorld, IN.nor));
                 return o;

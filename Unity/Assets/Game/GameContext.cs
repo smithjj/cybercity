@@ -54,5 +54,17 @@ namespace NeonKaido
 
         void Awake() { I = this; }
         void OnDestroy() { if (I == this) I = null; }
+
+        /// The scene has no Game object saved and the editor-only PlayMode bootstrap never
+        /// called D.Ensure(), so I stayed null in Play: WeatherDriver then treats the rain
+        /// as "1" every frame and the R rain override can never ease down (it re-reads its
+        /// start value instead of accumulating). Guarantee the shared ctx exists.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        static void Bootstrap()
+        {
+            if (I != null) return;
+            var go = new GameObject("Game");
+            go.AddComponent<GameContext>();
+        }
     }
 }

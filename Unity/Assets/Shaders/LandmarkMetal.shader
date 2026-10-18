@@ -53,9 +53,13 @@ Shader "NEON KAIDO/LandmarkMetal"
             Varyings vert(Attributes IN)
             {
                 Varyings o;
-                o.posCS = NkClip(IN.pos.xyz);
+                // World-space clip: this material is also used by the train undercarriage
+                // and pantographs, which are Transform-moved (identity-space landmarks
+                // render identically either way).
+                float3 wp = NkWorld(IN.pos.xyz);
+                o.posCS = NkClip(wp);
                 o.screenUV = o.posCS.xy / o.posCS.w * 0.5 + 0.5;
-                o.worldPos = NkWorld(IN.pos.xyz);
+                o.worldPos = wp;
                 o.nor = normalize(mul((float3x3)unity_ObjectToWorld, IN.nor));
                 return o;
             }

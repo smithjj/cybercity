@@ -377,8 +377,11 @@ namespace NeonKaido
             float rain;
             if (RainOverride >= 0f)
             {
-                // R toggle holds an eternal regime; glide toward it (0 = clear skies)
-                var cur = ctx != null ? ctx.weather.rain : 1f;
+                // R toggle holds an eternal regime; glide toward it (0 = clear skies).
+                // Fall back to our own last value, NOT 1f: with a null ctx the old code
+                // re-read 1f every frame, so the override snapped back to ~1 and the
+                // R key appeared dead.
+                var cur = ctx != null ? ctx.weather.rain : _rainNow;
                 rain = Mathf.Lerp(cur, RainOverride, Mathf.Min(1f, dt * 0.35f));
             }
             else rain = ctx != null ? ctx.weather.rain : 1f;

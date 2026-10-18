@@ -7,14 +7,19 @@
 
 float _AgxExposure; // 0.82
 
+// NOTE: the AgX reference / three.js post chain writes these matrices as GLSL mat3
+// literals, which fill COLUMNS. HLSL float3x3 literals fill ROWS, so copying the
+// numbers straight across silently transposes them (mul(M,c) then applies M^T).
+// That tinted every neutral surface violet and turned red lamps pink ("notorious
+// six" bleaching). These are the transposed (i.e. correct) forms: each row sums to 1.
 static const float3x3 NK_SRGB_TO_REC2020 = float3x3(
-    0.6274, 0.0691, 0.0164,
-    0.3293, 0.9195, 0.0880,
-    0.0433, 0.0113, 0.8956);
+    0.6274, 0.3293, 0.0433,
+    0.0691, 0.9195, 0.0113,
+    0.0164, 0.0880, 0.8956);
 static const float3x3 NK_REC2020_TO_SRGB = float3x3(
-    1.6605, -0.1246, -0.0182,
-    -0.5876, 1.1329, -0.1006,
-    -0.0728, -0.0083, 1.1187);
+    1.6605, -0.5876, -0.0728,
+    -0.1246, 1.1329, -0.0083,
+    -0.0182, -0.1006, 1.1187);
 
 float3 NkAgxContrast(float3 x)
 {
@@ -24,16 +29,16 @@ float3 NkAgxContrast(float3 x)
         - 6.868 * (x2 * x) + 0.4298 * x2 + 0.1191 * x - 0.00232;
 }
 
-float3 NkAgxTone(float3 color)
+float3 NkAgxToneRaw(float3 color)
 {
     const float3x3 inset = float3x3(
-        0.856627153315983, 0.137318972929847, 0.11189821299995,
-        0.0951212405381588, 0.761241990602591, 0.0767994186031903,
-        0.0482516061458583, 0.101439036467562, 0.811302368396859);
+        0.856627153315983, 0.0951212405381588, 0.0482516061458583,
+        0.137318972929847, 0.761241990602591, 0.101439036467562,
+        0.11189821299995, 0.0767994186031903, 0.811302368396859);
     const float3x3 outset = float3x3(
-        1.1271005818144368, -0.1413297634984383, -0.14132976349843826,
-        -0.11060664309660323, 1.157823702216272, -0.11060664309660294,
-        -0.016493938717834573, -0.016493938717834257, 1.2519364065950405);
+        1.1271005818144368, -0.11060664309660323, -0.016493938717834573,
+        -0.1413297634984383, 1.157823702216272, -0.016493938717834257,
+        -0.14132976349843826, -0.11060664309660294, 1.2519364065950405);
     const float minEv = -12.47393, maxEv = 4.026069;
 
     float3 c = color * _AgxExposure;
@@ -48,6 +53,17 @@ float3 NkAgxTone(float3 color)
     c = pow(max(float3(0, 0, 0), c), 2.2);
     c = mul(NK_REC2020_TO_SRGB, c);
     return saturate(c);
+}
+
+// AgX + the source chain's partial hue preservation (PostFX.js, hueKeep 0.45).
+// Raw AgX bleaches saturated lamps/neon toward white; blending with the max-channel
+// ratio keeps the hue and only lets the hottest cores desaturate.
+float3 NkAgxTone(float3 color)
+{
+    float3 tm = NkAgxToneRaw(color);
+    float mx = max(max(color.r, color.g), max(color.b, 1e-5));
+    float3 hue = color / mx * NkAgxToneRaw(float3(mx, mx, mx)).g;
+    return lerp(tm, hue, 0.45);
 }
 
 float NkLum(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }

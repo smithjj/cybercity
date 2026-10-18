@@ -24,6 +24,10 @@ Shader "NEON KAIDO/Sky"
         Tags { "RenderType" = "Opaque" }
         Pass
         {
+            // Color only: the dome is the background, and it must not occlude distant
+            // city geometry (its 900 m radius would if it wrote depth). HDRP's fallback
+            // sky must therefore be switched off (VisualEnvironment skyType = None) —
+            // otherwise HDRP's post-opaque sky pass paints over this dome.
             ZWrite Off
             Cull Front
             HLSLPROGRAM
@@ -56,8 +60,12 @@ Shader "NEON KAIDO/Sky"
             Varyings vert(Attributes IN)
             {
                 Varyings o;
-                o.pos = NkClip(IN.pos.xyz);
+                // The dome is a scaled (1800x) sphere that follows the camera, so the clip
+                // position MUST go through object-to-world; NkClip takes a WORLD position.
+                // (Passing IN.pos here collapsed the sphere to a 0.5 m ball at the origin,
+                // leaving the HDRP fallback sky — the blinding white — visible.)
                 o.worldPos = NkWorld(IN.pos.xyz);
+                o.pos = NkClip(o.worldPos);
                 return o;
             }
 

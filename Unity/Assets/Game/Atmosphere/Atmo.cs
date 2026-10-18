@@ -1,4 +1,6 @@
 using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.HighDefinition;
 
 namespace NeonKaido
 {
@@ -87,12 +89,19 @@ namespace NeonKaido
         /// JS skyColor port (NEON KAIDO/Sky). JS renders this as a WebGPU
         /// scene.backgroundNode; in Unity it must be real geometry that follows
         /// the camera (SkyFollow LateUpdate) so ray directions match per-pixel.
+        ///
+        /// The HDRP fallback sky must be OFF (VisualEnvironment skyType = None):
+        /// HDRP draws its sky AFTER the opaque pass and composites it against the
+        /// depth buffer, so a ZWrite-Off dome can never cover it. Left on, HDRP's
+        /// default HDRI sky (+ auto exposure) is the blinding white sky.
         public static void BuildSkyDome()
         {
-            var old = GameObject.Find("skydome");
-            if (old != null) UnityEngine.Object.DestroyImmediate(old);
+            // one dome only: the editor builder used "Skydome", the runtime one "skydome"
+            foreach (var t in UnityEngine.Object.FindObjectsByType<Transform>(UnityEngine.FindObjectsInactive.Include))
+                if (string.Equals(t.name, "skydome", System.StringComparison.OrdinalIgnoreCase))
+                    UnityEngine.Object.DestroyImmediate(t.gameObject);
             var go = GameObject.CreatePrimitive(UnityEngine.PrimitiveType.Sphere);
-            go.name = "skydome";
+            go.name = "Skydome";
             UnityEngine.Object.DestroyImmediate(go.GetComponent<UnityEngine.Collider>());   // no physics — camera lives inside it
             var mr = go.GetComponent<UnityEngine.Renderer>();
             mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
@@ -109,6 +118,53 @@ namespace NeonKaido
             go.transform.localPosition = Vector3.zero;
             go.transform.localScale = new Vector3(1800f, 1800f, 1800f);   // radius 900 < cam far 2000
             go.AddComponent<SkyFollow>();
+            EnsureHdrpSkyOff();
+        }
+
+        /// The sky/fog/exposure settings live on the scene's global AtmoVolume. It is
+        /// saved INACTIVE in Main.unity, so without this the camera falls back to HDRP's
+        /// default volume profile: HDRI sky (white) + automatic exposure. Re-enable it
+        /// before the first frame; if it is missing, build a minimal equivalent volume.
+        ///
+        /// Runs on scene load as well, so it also covers a standalone player (where the
+        /// editor-only PlayMode/BuildAll bootstrap does not run).
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        static void EnsureHdrpSkyOnLoad() => EnsureHdrpSkyOff();
+
+        static void EnsureHdrpSkyOff()
+        {
+            Volume atmo = null;
+            foreach (var v in UnityEngine.Object.FindObjectsByType<Volume>(UnityEngine.FindObjectsInactive.Include))
+                if (v.gameObject.name == "AtmoVolume") { atmo = v; break; }
+
+            if (atmo != null && atmo.sharedProfile != null)
+            {
+                atmo.gameObject.SetActive(true);
+                atmo.enabled = true;
+                atmo.isGlobal = true;
+                atmo.weight = 1f;
+                return;
+            }
+
+            // fallback: sky off + fixed 0 EV exposure (the JS PostFX exposure)
+            var profile = ScriptableObject.CreateInstance<VolumeProfile>();
+            var ve = profile.Add<VisualEnvironment>(true);
+            ve.skyType.overrideState = true;
+            ve.skyType.value = 0;                 // SkyType None — the dome is the sky
+            ve.cloudType.overrideState = true;
+            ve.cloudType.value = 0;
+            var ex = profile.Add<Exposure>(true);
+            ex.mode.overrideState = true;
+            ex.mode.value = ExposureMode.Fixed;
+            ex.fixedExposure.overrideState = true;
+            ex.fixedExposure.value = 0f;
+            var go = new GameObject("AtmoVolume");
+            go.hideFlags = HideFlags.DontSave;
+            var vol = go.AddComponent<Volume>();
+            vol.isGlobal = true;
+            vol.priority = 100f;
+            vol.weight = 1f;
+            vol.sharedProfile = profile;
         }
     }
 
