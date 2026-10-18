@@ -82,5 +82,46 @@ namespace NeonKaido
             Shader.SetGlobalVector("_SkyLightDir", new Vector4(0.3f, 0.8f, 0.3f, 0));
             Shader.SetGlobalVector("_SkyLightColor", Vector4.zero);
         }
+
+        /// Build the sky dome: camera-tracking inner sphere rendering the verbatim
+        /// JS skyColor port (NEON KAIDO/Sky). JS renders this as a WebGPU
+        /// scene.backgroundNode; in Unity it must be real geometry that follows
+        /// the camera (SkyFollow LateUpdate) so ray directions match per-pixel.
+        public static void BuildSkyDome()
+        {
+            var old = GameObject.Find("skydome");
+            if (old != null) UnityEngine.Object.DestroyImmediate(old);
+            var go = GameObject.CreatePrimitive(UnityEngine.PrimitiveType.Sphere);
+            go.name = "skydome";
+            UnityEngine.Object.DestroyImmediate(go.GetComponent<UnityEngine.Collider>());   // no physics — camera lives inside it
+            var mr = go.GetComponent<UnityEngine.Renderer>();
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            mr.lightProbeUsage = UnityEngine.Rendering.LightProbeUsage.Off;
+            mr.reflectionProbeUsage = UnityEngine.Rendering.ReflectionProbeUsage.Off;
+            var mat = new Material(Shader.Find("NEON KAIDO/Sky"));
+            var tex = new Texture2D(256, 256, TextureFormat.RGBA32, false, true);
+            tex.wrapMode = TextureWrapMode.Repeat;
+            tex.filterMode = FilterMode.Bilinear;
+            tex.LoadRawTextureData(AtmoNoise.Create(256));   // verbatim JS fBm noise
+            tex.Apply(false, false);
+            mat.SetTexture("_NoiseTex", tex);
+            mr.sharedMaterial = mat;
+            go.transform.localPosition = Vector3.zero;
+            go.transform.localScale = new Vector3(1800f, 1800f, 1800f);   // radius 900 < cam far 2000
+            go.AddComponent<SkyFollow>();
+        }
+    }
+
+    /// Tiny helper: keep the sky dome centered on the camera so its ray
+    /// directions match the JS backgroundNode() per-pixel mapping.
+    public class SkyFollow : MonoBehaviour
+    {
+        Transform _cam;
+        void LateUpdate()
+        {
+            var c = Camera.main;
+            if (c != null) _cam = c.transform;
+            if (_cam != null) transform.position = _cam.position;
+        }
     }
 }

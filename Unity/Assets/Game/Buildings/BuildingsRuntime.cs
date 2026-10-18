@@ -127,6 +127,7 @@ namespace NeonKaido
         public static string BuildAll(Dictionary<string, Material> mats = null, Material acMat = null)
         {
             Shader.SetGlobalFloat("_AgxExposure", 0.82f); // JS PostFX exposure
+            NeonKaido.Atmo.BuildSkyDome();   // camera-tracking sky replaces the JS scene.backgroundNode
             // fresh state each call (DestroyImmediate: eval retries can run this twice in one frame)
             var oldRoot = GameObject.Find("/Buildings");
             if (oldRoot != null) UnityEngine.Object.DestroyImmediate(oldRoot);
