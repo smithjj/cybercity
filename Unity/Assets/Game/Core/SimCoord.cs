@@ -15,9 +15,9 @@ namespace NeonKaido
 
         public static Vector3 FromUnity(Vector3 u) => new Vector3(u.x, u.y, -u.z);
 
-        /// Camera rotation for a sim-space yaw/pitch. Unity camera yaw = 180 - simYaw;
+        /// Camera rotation for a sim-space yaw/pitch. Unity camera yaw = -simYaw (north = +Z);
         /// Euler x > 0 looks down.
         public static Quaternion CamRot(double yawDeg, double pitchDeg) =>
-            Quaternion.Euler((float)pitchDeg, (float)(180 - yawDeg), 0f);
+            Quaternion.Euler((float)pitchDeg, (float)(-yawDeg), 0f);
     }
 }

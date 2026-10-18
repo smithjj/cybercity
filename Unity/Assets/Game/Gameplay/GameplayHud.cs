@@ -124,7 +124,7 @@ namespace NeonKaido
             float W = Screen.width, H = Screen.height, z = Z;
             float zoom = Z; // reference 1920x1080 → scaled units
             var fwd = pc != null && pc.GetComponentInChildren<Camera>() != null ? pc.GetComponentInChildren<Camera>().transform.forward : Vector3.forward;
-            float heading = (Mathf.Atan2(fwd.x, -fwd.z) * Mathf.Rad2Deg + 360f) % 360f;
+            float heading = (Mathf.Atan2(fwd.x, fwd.z) * Mathf.Rad2Deg + 360f) % 360f;  // 0 = +Z = north
             Vector3 targetPos = TargetWorld(gigs, g);
             float targetDist = targetPos.sqrMagnitude > 0 ? Vector2.Distance(new Vector2(playerFeet.x, playerFeet.z), new Vector2(targetPos.x, targetPos.z)) : 0f;
             bool rain = true;
@@ -259,7 +259,7 @@ namespace NeonKaido
             if (target.sqrMagnitude > 0 && PlayerController.I != null)
             {
                 var fwdv = Camera.main != null ? Camera.main.transform.forward : Vector3.forward;
-                float bt = Mathf.Atan2(target.x - PlayerController.I.transform.position.x, -(target.z - PlayerController.I.transform.position.z)) * Mathf.Rad2Deg;
+                float bt = Mathf.Atan2(target.x - PlayerController.I.transform.position.x, target.z - PlayerController.I.transform.position.z) * Mathf.Rad2Deg;
                 float rel = ((bt - heading + 540f) % 360f) - 180f;
                 bool vis = Mathf.Abs(rel) < 68f;
                 float clamped = Mathf.Clamp(rel, -68f, 68f);

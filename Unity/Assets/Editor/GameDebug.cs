@@ -71,7 +71,7 @@ namespace NeonKaido.EditorTools
                 cam.fieldOfView = 60f;
                 cam.nearClipPlane = 0.1f;
                 cam.farClipPlane = 4000f;
-                cam.transform.SetPositionAndRotation(ToU(3, 1.7f, 20), Quaternion.Euler(0, 180, 0)); // spawn, facing north
+                cam.transform.SetPositionAndRotation(ToU(3, 1.7f, 20), Quaternion.Euler(0, 0, 0)); // spawn, facing north (+Z)
                 var ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
                 ground.name = "Ground";
                 ground.transform.localScale = new Vector3(200, 1, 200);
@@ -193,10 +193,10 @@ namespace NeonKaido.EditorTools
             var cam = Camera.main;
             if (cam == null) return "PoseCam: no MainCamera in active scene";
             cam.fieldOfView = (float)fov;
-            // Unity camera yaw = 180 - simYaw (sim north/-Z is Unity +Z); Euler x>0 looks down.
+            // Unity camera yaw = -simYaw (sim north/-Z is Unity +Z); Euler x>0 looks down.
             cam.transform.SetPositionAndRotation(
                 new Vector3((float)simX, (float)eyeH, (float)-simZ),
-                Quaternion.Euler((float)pitchDeg, (float)(180 - yawDeg), 0f));
+                Quaternion.Euler((float)pitchDeg, (float)(-yawDeg), 0f));
             return "cam pos=" + cam.transform.position + " fov=" + fov;
         }
 
@@ -1247,7 +1247,7 @@ namespace NeonKaido.EditorTools
             }
             go.transform.SetPositionAndRotation(
                 new Vector3((float)simX, 0f, (float)-simZ),
-                Quaternion.Euler(0, (float)(180 - yawDeg), 0f));
+                Quaternion.Euler(0, (float)(-yawDeg), 0f));
             return "player @ " + go.transform.position;
         }
 

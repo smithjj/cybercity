@@ -150,9 +150,9 @@ namespace NeonKaido
 
         void Start()
         {
-            // street-view start (sim 3.3, 30 -> unity z=-30), facing north (down -z)
+            // street-view start (sim 3.3, 30 -> unity z=-30), facing north (down +z)
             transform.position = SpawnPos;
-            Yaw = Mathf.PI; Pitch = 0.04f;   // face down -z, into the avenue
+            Yaw = 0f; Pitch = 0.04f;         // face +Z, north down the avenue
             _camY = transform.position.y;
             _lastSafe = transform.position;
             PlaceAt(SpawnPos.x, SpawnPos.y, SpawnPos.z, null);
@@ -213,8 +213,12 @@ namespace NeonKaido
                 Time.timeScale = 1f;
                 // If Start ran before the play-mode snapshot restored the edit camera pose,
                 // the player would see the saved camera (often perched on a car) and freeze.
-                if (Time.frameCount < 30 && !NeonKaido.Driving.Active && Vector3.Distance(transform.position, SpawnPos) > 5f)
-                    PlaceAt(SpawnPos.x, SpawnPos.y, SpawnPos.z, null);
+                if (Time.frameCount < 30 && !NeonKaido.Driving.Active)
+                {
+                    if (Vector3.Distance(transform.position, SpawnPos) > 5f)
+                        PlaceAt(SpawnPos.x, SpawnPos.y, SpawnPos.z, null);
+                    Yaw = 0f; Pitch = 0.04f;   // face north (+Z); a saved-camera snapshot may have restored another facing
+                }
             }
             Shader.SetGlobalFloat("_SimTime", t);
             NeonKaido.Atmo.PushGlobals();

@@ -2,10 +2,11 @@
 // A static city map is baked once from LAYOUT + the real building lots (BuildPlan.Lots);
 // the route to the active gig is a Dijkstra path over the same road graph as the JS.
 //
-// Coordinate note: the Unity port mirrors the JS world in Z (Unity z = -sim z) and its compass
-// calls Unity -Z "north" (spawn yaw = PI faces down -Z). The map follows that convention, so the
-// bake is vertically flipped relative to the browser map: map y = (Z1 - simZ) * S with Z1 = +160.
-// Everything else (graph, route, projection) uses plain sim coordinates and the JS math verbatim.
+// Coordinate note: the Unity port mirrors the JS world in Z (Unity z = -sim z), so world north
+// (sim -Z) is Unity +Z. The compass in this port reports 0 at +Z, which makes its heading equal to
+// the camera's Unity yaw and identical to the browser's heading. The map therefore uses the JS
+// projection verbatim: map y = (simZ - Z0) * S with Z0 = -740 (north at the top of the texture).
+// Everything (bake, graph, route, projection) is plain sim coordinates and the JS math.
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -48,7 +49,7 @@ namespace NeonKaido
 
         // ================================================================ bake
         static float PX(float x) => (x - X0) * S;
-        static float PY(float z) => (Z1 - z) * S;        // map-y from the top (north)
+        static float PY(float z) => (z - Z0) * S;        // map-y from the top: sim -Z (north) = 0
 
         static Color Hex(string hx)
         {
@@ -80,8 +81,8 @@ namespace NeonKaido
             float az = Mathf.Min(z0, z1), bz = Mathf.Max(z0, z1);
             px0 = Mathf.Clamp(Mathf.RoundToInt(PX(ax)), 0, TX - 1);
             px1 = Mathf.Clamp(Mathf.RoundToInt(PX(bx)), 0, TX - 1);
-            py0 = Mathf.Clamp(Mathf.RoundToInt(PY(bz)), 0, TY - 1);   // larger z -> up
-            py1 = Mathf.Clamp(Mathf.RoundToInt(PY(az)), 0, TY - 1);
+            py0 = Mathf.Clamp(Mathf.RoundToInt(PY(az)), 0, TY - 1);   // north / smaller z -> top
+            py1 = Mathf.Clamp(Mathf.RoundToInt(PY(bz)), 0, TY - 1);
         }
 
         // fillRect in sim metres
@@ -104,8 +105,8 @@ namespace NeonKaido
             var c32 = (Color32)c;
             int ax0 = Mathf.Clamp(Mathf.RoundToInt(PX(ax)), 0, TX - 1);
             int ax1 = Mathf.Clamp(Mathf.RoundToInt(PX(bx)), 0, TX - 1);
-            int az0 = Mathf.Clamp(Mathf.RoundToInt(PY(bz)), 0, TY - 1);
-            int az1 = Mathf.Clamp(Mathf.RoundToInt(PY(az)), 0, TY - 1);
+            int az0 = Mathf.Clamp(Mathf.RoundToInt(PY(az)), 0, TY - 1);
+            int az1 = Mathf.Clamp(Mathf.RoundToInt(PY(bz)), 0, TY - 1);
             for (int q = 0; q < th; q++)
             {
                 for (int px = ax0; px <= ax1; px++)
@@ -125,8 +126,8 @@ namespace NeonKaido
         static void VDash(Color32[] P, Color c, float x, float zA, float zB, float dashM, float gapM)
         {
             int px = Mathf.Clamp(Mathf.RoundToInt(PX(x)), 0, TX - 1);
-            int y0 = Mathf.RoundToInt(PY(Mathf.Max(zA, zB)));
-            int y1 = Mathf.RoundToInt(PY(Mathf.Min(zA, zB)));
+            int y0 = Mathf.RoundToInt(PY(Mathf.Min(zA, zB)));
+            int y1 = Mathf.RoundToInt(PY(Mathf.Max(zA, zB)));
             int period = Mathf.Max(1, Mathf.RoundToInt((dashM + gapM) * S));
             int dash = Mathf.Max(1, Mathf.RoundToInt(dashM * S));
             for (int y = y0; y <= y1; y++)
@@ -222,8 +223,8 @@ namespace NeonKaido
             float rvx1 = (float)(Layout.RiverXCenter + Layout.RiverHalfWidth);
             int rx0 = Mathf.Clamp(Mathf.RoundToInt(PX(rvx0)), 0, TX - 1);
             int rx1 = Mathf.Clamp(Mathf.RoundToInt(PX(rvx1)), 0, TX - 1);
-            int ry0 = Mathf.Clamp(Mathf.RoundToInt(PY((float)Layout.RiverZStart)), 0, TY - 1);
-            int ry1 = Mathf.Clamp(Mathf.RoundToInt(PY((float)Layout.RiverZEnd)), 0, TY - 1);
+            int ry0 = Mathf.Clamp(Mathf.RoundToInt(PY((float)Layout.RiverZEnd)), 0, TY - 1);
+            int ry1 = Mathf.Clamp(Mathf.RoundToInt(PY((float)Layout.RiverZStart)), 0, TY - 1);
             var rvA = (Color32)Hex("#0b3442");
             var rvB = (Color32)Hex("#0e4252");
             for (int px = rx0; px <= rx1; px++)
@@ -266,8 +267,8 @@ namespace NeonKaido
             for (float x = stX0; x > stX1; x -= 1.2f)
             {
                 int px = Mathf.Clamp(Mathf.RoundToInt(PX(x)), 0, TX - 1);
-                int py0 = Mathf.Clamp(Mathf.RoundToInt(PY(alZ + alW / 2)), 0, TY - 1);
-                int py1 = Mathf.Clamp(Mathf.RoundToInt(PY(alZ - alW / 2)), 0, TY - 1);
+                int py0 = Mathf.Clamp(Mathf.RoundToInt(PY(alZ - alW / 2)), 0, TY - 1);
+                int py1 = Mathf.Clamp(Mathf.RoundToInt(PY(alZ + alW / 2)), 0, TY - 1);
                 for (int py = py0; py <= py1; py++) Blend(P, px, py, stairC);
             }
             // lantern dots along the alley (x % 12 js parity on integer-ish steps)
@@ -588,7 +589,7 @@ namespace NeonKaido
         static float HeadingFrom(Camera cam)
         {
             var f = cam.transform.forward;
-            return (Mathf.Atan2(f.x, -f.z) * Mathf.Rad2Deg + 360f) % 360f;
+            return (Mathf.Atan2(f.x, f.z) * Mathf.Rad2Deg + 360f) % 360f;   // 0 = +Z = north
         }
 
         public static void Prepare(float dt)
@@ -705,7 +706,7 @@ namespace NeonKaido
             Vector2 ToS(float simx, float simz)
             {
                 float dx = (simx - _fPos.x) * sc;
-                float dy = (_fPos.y - simz) * sc;
+                float dy = (simz - _fPos.y) * sc;
                 return new Vector2(cx + dx * c - dy * s, cy + dx * s + dy * c);
             }
             Vector2 ClampEdge(Vector2 p, float m)
@@ -785,7 +786,7 @@ namespace NeonKaido
             for (int i = 0; i < _route.Count; i++)
             {
                 float dx = (_route[i].x - ps.x) * sc;
-                float dy = (ps.y - _route[i].y) * sc;
+                float dy = (_route[i].y - ps.y) * sc;
                 pts[i] = new Vector2(cx + dx * c - dy * s, cy + dx * s + dy * c);
             }
 
