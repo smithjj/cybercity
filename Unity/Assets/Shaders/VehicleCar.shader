@@ -66,9 +66,11 @@ Shader "NEON KAIDO/VehicleCar"
                 // Cars are GameObjects with their own transform, so the clip position MUST use
                 // the world position. Clipping the (wheel-spun) object-space position drew every
                 // parked/traffic car at the world origin — the "glow truck in the road".
-                // headlamp plates are modelled a few cm inside the nose on van/kei/taxi,
-                // so the fascia occludes the lens. Push the head tag out to sit on the nose.
-                if (IN.uv1.x > 2.5 && IN.uv1.x < 3.5) lp.z += 0.10;
+                // Headlamp plates sit 4-18 mm inside the nose on hero/kei/taxi/van, so the
+                // fascia occludes the lens. Nudge the plate just proud of the body: 0.10 made
+                // the van's corner lamps hover ~8 cm in front of their bumper (very visible in
+                // a 3/4 view); the measured clearance needed is 4-18 mm per model.
+                if (IN.uv1.x > 2.5 && IN.uv1.x < 3.5) lp.z += 0.025;
                 float3 wp = NkWorld(lp.xyz);
                 o.posCS = NkClip(wp);
                 o.screenUV = o.posCS.xy / o.posCS.w * 0.5 + 0.5;
