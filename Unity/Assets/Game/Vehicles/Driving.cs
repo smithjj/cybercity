@@ -379,7 +379,7 @@ namespace NeonKaido
             }
             if (Mathf.Abs(mx) + Mathf.Abs(my) > 0.001f)
             {
-                _camYawOff -= mx * 0.06f;
+                _camYawOff += mx * 0.06f; // +X orbits the camera so the view turns right (Unity yaw is CW from above)
                 _camPitchOff = Mathf.Clamp(_camPitchOff - my * 0.03f, -0.25f, 0.5f);
                 _lookIdle = 0f;
             }
