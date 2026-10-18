@@ -144,7 +144,13 @@ namespace NeonKaido
         {
             int b = _FV.Count;
             Vector3[] p = { c - u * hu - v * hv, c + u * hu - v * hv, c + u * hu + v * hv, c - u * hu + v * hv };
-            Vector2[] t = { new Vector2(0, 0), new Vector2(1, 0), new Vector2(1, 1), new Vector2(0, 1) };
+            // sign_lib UV is min/max (x0,y0,x1,y1) into the 4096 atlas — the same convention
+            // TrafficSignals.RectOf + AddLens bake. The shader samples _NeonTex / _ColorTex with this
+            // uv directly, so it has to be atlas space, not the local 0..1 quad (which showed the
+            // whole atlas squeezed onto every sign).
+            Vector2[] t = {
+                new Vector2(d.UV[0], d.UV[1]), new Vector2(d.UV[2], d.UV[1]),
+                new Vector2(d.UV[2], d.UV[3]), new Vector2(d.UV[0], d.UV[3]) };
             float[] su = { -1, 1, 1, -1 }, sv = { -1, -1, 1, 1 };
             var cu = Mir(u); var cv = Mir(v); var cn = Mir(n);
             bool ccw = Vector3.Dot(Vector3.Cross(cu, cv), cn) >= 0;

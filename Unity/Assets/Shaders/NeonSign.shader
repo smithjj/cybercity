@@ -9,7 +9,16 @@
 //        4 LED channel letters, 5 screen/pixel grid.
 Shader "NEON KAIDO/NeonSign"
 {
-    Properties { }
+    // These MUST be declared here. A TEXTURE2D() in the HLSL alone gives the shader an empty
+    // property sheet, and Material.SetTexture() on an undeclared name is silently dropped — which
+    // left _NeonTex/_ColorTex unbound, so every sign face sampled the default white texture and
+    // came out as a flat colour panel instead of neon tubes.
+    Properties
+    {
+        _NeonTex ("Neon Atlas (R tube, G halo, B seg id)", 2D) = "white" {}
+        _ColorTex ("Colour Atlas", 2D) = "white" {}
+        _Noise ("Noise", 2D) = "white" {}
+    }
     SubShader
     {
         Tags { "RenderPipeline" = "HDRenderPipeline" "RenderType" = "TransparentCutout" "Queue" = "AlphaTest" }
