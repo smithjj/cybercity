@@ -33,8 +33,15 @@ namespace NeonKaido
             L("wood_slats_r", "wood_slats_r");
         }
 
+        // Lazily load on first lookup: LoadTextures() used to be called only from Cherry.Build, so any
+        // landmark that was built before the cherry trees (e.g. Skyline's holo billboards) asked for a
+        // texture that was not in the dictionary yet, got null, and bound _MainTex = null. The shader
+        // then sampled its "white" default and the billboards rendered as blank white slabs.
         public static Texture2D Tex(string name)
-            => _tex.TryGetValue(name, out var t) ? t : null;
+        {
+            if (_tex.Count == 0) LoadTextures();
+            return _tex.TryGetValue(name, out var t) ? t : null;
+        }
 
         public static Material ShaderMat(string shaderName)
         {

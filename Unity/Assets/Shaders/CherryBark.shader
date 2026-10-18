@@ -2,6 +2,16 @@
 // macro noise, moss on upward-facing limbs, roughness map, tangent-less normals.
 Shader "NEON KAIDO/CherryBark"
 {
+
+    // See CherryBlossom: bark albedo/normal/roughness never bound, so trunks sampled
+    // white and were fully rough.
+    Properties
+    {
+        _MainTex ("Bark", 2D) = "white" {}
+        _BumpMap ("Bark Normal", 2D) = "bump" {}
+        _RoughMap ("Bark Roughness", 2D) = "white" {}
+        _Noise ("Noise", 2D) = "white" {}
+    }
     SubShader
     {
         Tags { "RenderType" = "Opaque" }

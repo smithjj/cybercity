@@ -3,6 +3,15 @@
 // lantern glow from below the river side + pink city glow emissive.
 Shader "NEON KAIDO/CherryBlossom"
 {
+
+    // Declared so Material.SetTexture can bind them: texture slots need a Properties
+    // entry (floats/colours do not). Without these the sampler read the default white
+    // texture, so clip(a-0.5) never cut and every blossom card drew as a solid quad.
+    Properties
+    {
+        _MainTex ("Blossom Cards", 2D) = "white" {}
+        _Noise ("Noise", 2D) = "white" {}
+    }
     SubShader
     {
         Tags { "RenderType" = "TransparentCutout" }

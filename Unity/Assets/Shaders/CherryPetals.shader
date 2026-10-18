@@ -4,6 +4,14 @@
 // _Kind: 0 = falling, 1 = water, 2 = ground.
 Shader "NEON KAIDO/CherryPetals"
 {
+
+    // See CherryBlossom: without these the petal atlas never bound and clip(a-0.4)
+    // never cut.
+    Properties
+    {
+        _MainTex ("Petals", 2D) = "white" {}
+        _Noise ("Noise", 2D) = "white" {}
+    }
     SubShader
     {
         Tags { "RenderType" = "TransparentCutout" }

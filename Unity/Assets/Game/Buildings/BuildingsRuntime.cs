@@ -10,6 +10,9 @@ namespace NeonKaido
 {
     public static class BuildingsRuntime
     {
+        /// Must match the _BLPos/_BLColor array size declared in AtmoCommon.hlsl.
+        public const int LightArraySize = 384;
+
         static Transform _root;
 
         public static Transform Root
@@ -310,13 +313,25 @@ namespace NeonKaido
         public static void PushLightArrays(Vector4[] blPos, Vector4[] blCol, List<Material> extra, Material acMat)
         {
             if (blPos == null || blPos.Length == 0) return;
+            // The shader declares _BLPos/_BLColor[384] and Unity can never grow a material's
+            // SetVectorArray slot: a shorter push is remembered as the array size and every later
+            // longer push is capped ("Property (_BLPos) exceeds previous array size (384 vs 92)").
+            // StreetLamps pushes its own tiny list during the world build, which used to freeze
+            // every material at 92 lights, so the real 384-light push was truncated and most lamps
+            // (and cars) cast no light at all. Always upload the full 384, zero-padded, and report
+            // the real count so the shader loop still stops early.
+            int count = Mathf.Min(blPos.Length, LightArraySize);
+            var pos = new Vector4[LightArraySize];
+            var col = new Vector4[LightArraySize];
+            System.Array.Copy(blPos, pos, count);
+            System.Array.Copy(blCol, col, count);
             var done = new HashSet<Material>();
             void Push(Material m)
             {
                 if (m == null || !done.Add(m)) return;
-                m.SetVectorArray("_BLPos", blPos);
-                m.SetVectorArray("_BLColor", blCol);
-                m.SetFloat("_BLCount", blPos.Length);
+                m.SetVectorArray("_BLPos", pos);
+                m.SetVectorArray("_BLColor", col);
+                m.SetFloat("_BLCount", count);
             }
             foreach (var m in extra) Push(m);
             Push(acMat);

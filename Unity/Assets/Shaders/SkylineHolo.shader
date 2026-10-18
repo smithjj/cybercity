@@ -3,6 +3,12 @@
 // uv0 = atlas uv (rect-mapped at bake), uv1 = (intensity, seed, _, _).
 Shader "NEON KAIDO/SkylineHolo"
 {
+
+    // Declared so the holo ad atlas can be bound (see CherryBlossom).
+    Properties
+    {
+        _MainTex ("Holo Ads", 2D) = "white" {}
+    }
     SubShader
     {
         Tags { "RenderType" = "Transparent" "Queue" = "Transparent" }

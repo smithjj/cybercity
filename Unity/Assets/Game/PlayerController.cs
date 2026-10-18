@@ -190,15 +190,17 @@ namespace NeonKaido
                 if (root != null) lights.AddRange(root.GetComponentsInChildren<Light>());
             }
             if (lights.Count == 0) return;
-            if (lights.Count > 384)
+            const int budget = NeonKaido.BuildingsRuntime.LightArraySize;
+            if (lights.Count > budget)
             {
+                // Rank by reach*intensity so lamps and signs both survive; the tail is dropped.
                 lights.Sort((a, b) =>
                 {
                     float ka = (a.color.r + a.color.g + a.color.b) * a.intensity * a.range;
                     float kb = (b.color.r + b.color.g + b.color.b) * b.intensity * b.range;
                     return kb.CompareTo(ka);
                 });
-                lights.RemoveRange(384, lights.Count - 384);
+                lights.RemoveRange(budget, lights.Count - budget);
             }
             var pos = new Vector4[lights.Count];
             var col = new Vector4[lights.Count];

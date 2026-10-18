@@ -1,7 +1,11 @@
 // AC condenser unit (instanced) — port of materials.js createACMaterial.
 Shader "NEON KAIDO/AC"
 {
-    Properties {}
+    // _Noise used to be HLSL-only, so ApplyFog(bindNoise:true)'s SetTexture was dropped.
+    Properties
+    {
+        _Noise ("Noise", 2D) = "white" {}
+    }
     SubShader
     {
         Tags { "RenderPipeline" = "HDRenderPipeline" "RenderType" = "Opaque" }

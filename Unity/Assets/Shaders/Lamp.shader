@@ -2,7 +2,17 @@
 // Lens: pure emissive (tint x _LensIntensity), matching JS sb.F sp [2,9]/[2,8].
 Shader "NEON KAIDO/Lamp"
 {
-    Properties {}
+    // Declared so the four lamp material assets carry these values. SetFloat on an undeclared
+    // name works in memory but is not serialized, so a session that does not re-run the world
+    // build got _LensIntensity = 0 and every street lamp lens fell through to the non-emissive
+    // branch — visible poles with unlit heads.
+    Properties
+    {
+        _LensIntensity ("Lens Intensity", Float) = 0
+        _Rough ("Roughness", Range(0, 1)) = 0.5
+        _Metal ("Metalness", Range(0, 1)) = 0
+        _Noise ("Noise", 2D) = "white" {}
+    }
     SubShader
     {
         Tags { "RenderPipeline" = "HDRenderPipeline" "RenderType" = "Opaque" }
