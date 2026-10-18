@@ -246,6 +246,7 @@ namespace NeonKaido
 
             if (!NeonKaido.Driving.Active && Input.GetKeyDown(KeyCode.V)) { WalkMode = !WalkMode; _locked = false; }
             if (Input.GetKeyDown(KeyCode.H)) NeonKaido.GameplayHud.Toggle();
+            if (Input.GetKeyDown(KeyCode.N)) NeonKaido.Minimap.ToggleRotate();
             if (Input.GetKeyDown(KeyCode.F8)) DumpEyeBand();
             if (Input.GetKeyDown(KeyCode.R))
             {
@@ -291,6 +292,8 @@ namespace NeonKaido
                 else StepFly(dt);
                 NeonKaido.Driving.UpdateIdle(this);
             }
+            // HUD map: rotate/scale the baked city map into its RT off the GUI thread
+            NeonKaido.Minimap.Prepare(dt);
         }
 
         void StepFly(float dt)
