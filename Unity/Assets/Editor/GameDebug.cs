@@ -493,18 +493,12 @@ namespace NeonKaido.EditorTools
             return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
         }
 
-        // scene fog uniforms (atmo.js fogNodeFn defaults) + noise binding for fog patches
+        // texture binding for the fog patch noise. The fog *constants* are deliberately NOT set here
+        // any more: none of the shaders declares them in Properties, so SetFloat only ever added a
+        // non-serialized material override that (a) vanished on the next domain reload and (b) then
+        // shadowed the globals Atmo.PushGlobals now publishes. They live in Atmo (one source of truth).
         static void ApplyFog(Material mat, bool bindNoise)
         {
-            mat.SetFloat("_FogDensity", 0.0022f);
-            mat.SetFloat("_FogFalloff", 0.028f);
-            mat.SetFloat("_FogBase", 0f);
-            mat.SetFloat("_FogStart", 14f);
-            mat.SetFloat("_HazeDensity", 0.0002f);
-            mat.SetFloat("_FogMax", 0.985f);
-            mat.SetFloat("_GroundGlow", 0.18f);
-            mat.SetFloat("_Rain", 1f);
-            mat.SetVector("_CloudOffset", new Vector4(0f, 0f, 0, 0));
             if (bindNoise) mat.SetTexture("_Noise", TexB(TexDir + "/noise512.png", true, true));
         }
 

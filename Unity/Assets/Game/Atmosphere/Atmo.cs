@@ -24,7 +24,7 @@ namespace NeonKaido
         public const float FogStart = 14.0f;       // metres of clear air in front of the camera
         public const float HazeDensity = 0.0002f;  // height-independent distance haze
         public const float FogMax = 0.985f;
-        public const float GroundGlow = 0.18f;     // street-level inscatter boost
+        public const float GroundGlow = 0.30f;     // street-level inscatter boost (neon ground glow)
         public const float CloudCover = 0.5f;
 
         public static readonly Vector3 LightningDir = new Vector3(0.3f, 0.35f, -0.9f).normalized;
@@ -76,6 +76,19 @@ namespace NeonKaido
             Shader.SetGlobalVector("_GroundHaze", GroundHaze);
             Shader.SetGlobalFloat("_SkyBrightness", 1f);
             Shader.SetGlobalFloat("_Rain", _state.rain);
+            // Scene fog constants (atmo.js fogNodeFn). These MUST be pushed as globals: no shader
+            // declares them in Properties, so the only other writer was GameDebug.ApplyFog, which
+            // sets them as *material* floats during an Editor-side world build. Those are not
+            // serialized into the .mat and are not re-applied after a domain reload, so at runtime
+            // every one of them read 0 and NkFogApply() computed optical = 0 on every surface —
+            // the scene had no fog, haze or ground glow at all and distance fell to pure black.
+            Shader.SetGlobalFloat("_FogDensity", FogDensity);
+            Shader.SetGlobalFloat("_FogFalloff", FogFalloff);
+            Shader.SetGlobalFloat("_FogBase", FogBase);
+            Shader.SetGlobalFloat("_FogStart", FogStart);
+            Shader.SetGlobalFloat("_HazeDensity", HazeDensity);
+            Shader.SetGlobalFloat("_FogMax", FogMax);
+            Shader.SetGlobalFloat("_GroundGlow", GroundGlow);
             Shader.SetGlobalVector("_CloudOffset", new Vector4(_state.cloudOffset.x, _state.cloudOffset.y, 0, 0));
             float hi = _state.HemiIntensity;
             Shader.SetGlobalColor("_AmbientSky", new Color(HemiSky.r * hi, HemiSky.g * hi, HemiSky.b * hi));

@@ -87,7 +87,8 @@ Shader "NEON KAIDO/WxRain"
                 float3 v = float3(_WxWind.x * g, -term, -_WxWind.y * g) + flutter;
                 float3 head = float3(px, py, pz);
                 float3 world; float coverage; float dist;
-                WxStreak(head, (v - _WxCamVel * 0.7) * 0.055, radius, 1.15, IN.corner, world, coverage, dist);
+                // minPixels: rain.js streakQuad(head, motion, radius, 0.75)
+                WxStreak(head, (v - _WxCamVel * 0.7) * 0.055, radius, 0.75, IN.corner, world, coverage, dist);
                 float nearFade = smoothstep(0.35, 1.2, dist);
                 float hd = length(head.xz - _WxCam.xz) / R;
                 float edgeFade = 1.0 - smoothstep(0.75, 1.0, hd);
@@ -98,7 +99,11 @@ Shader "NEON KAIDO/WxRain"
                 OUT.worldPos = world;
                 OUT.corner = IN.corner;
                 OUT.col = c * glint;
-                OUT.alpha = pow(coverage, 0.45) * nearFade * edgeFade * A * _WxRain * 1.7;
+                // rain.js: opacityNode = coverage^0.6 * nearFade * edgeFade * layerA * rain. The
+                // port used coverage^0.45 and an extra x1.7 (a stand-in for the missing
+                // viewportOpaqueMipTexture background tint), which made the streaks far heavier and
+                // more opaque than the browser's — they read as white scratches over the whole frame.
+                OUT.alpha = pow(coverage, 0.6) * nearFade * edgeFade * A * _WxRain;
                 OUT.positionCS = NkClip(world);
                 OUT.screenUV = OUT.positionCS.xy / OUT.positionCS.w * 0.5 + 0.5;
                 return OUT;
