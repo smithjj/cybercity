@@ -20,6 +20,11 @@ namespace NeonKaido
 
         CharacterController _cc;
         Transform _eye;
+        // Fixed street spawn. Start() applies it, and the first Update re-applies it if the
+        // editor's play-mode scene snapshot overwrote the camera transform after Start
+        // (a race seen when Time.timeScale was left at 0 by shot tooling).
+        static readonly Vector3 SpawnPos = new Vector3(3.3f, 1.7f, -30f); // between the traffic lane and the parked row
+        bool _spawnChecked;
         bool _eyeIsRoot;   // NKCamera hosts the camera on the player root itself
         public bool WalkMode = true;
         // HUD inputs (GameplayHud reads these per frame)
@@ -113,6 +118,8 @@ namespace NeonKaido
         void Awake()
         {
             I = this;
+            // shot tooling can leave the edit-mode timeScale at 0; play must start running
+            Time.timeScale = 1f;
             _cc = gameObject.GetComponent<CharacterController>();
             if (_cc == null) _cc = gameObject.AddComponent<CharacterController>();
             _cc.radius = Radius; _cc.height = HStand; _cc.center = new Vector3(0, HStand * 0.5f, 0);
@@ -143,12 +150,12 @@ namespace NeonKaido
 
         void Start()
         {
-            // street-view start (sim 1.5, 30 -> unity z=-30), facing north (down -z)
-            transform.position = new Vector3(1.5f, 1.7f, -30f);
+            // street-view start (sim 3.3, 30 -> unity z=-30), facing north (down -z)
+            transform.position = SpawnPos;
             Yaw = Mathf.PI; Pitch = 0.04f;   // face down -z, into the avenue
             _camY = transform.position.y;
             _lastSafe = transform.position;
-            PlaceAt(1.5f, 1.7f, -30f, null);
+            PlaceAt(SpawnPos.x, SpawnPos.y, SpawnPos.z, null);
             EnsureLightArrays();
             foreach (var l in Object.FindObjectsOfType<Light>()) l.enabled = false;
         }
@@ -200,6 +207,15 @@ namespace NeonKaido
             float t = (float)(Time.timeSinceLevelLoadAsDouble % 3600.0);
             float dt = Mathf.Min(Time.deltaTime, 0.05f);
             double td = Time.timeAsDouble % 86400.0;
+            if (!_spawnChecked)
+            {
+                _spawnChecked = true;
+                Time.timeScale = 1f;
+                // If Start ran before the play-mode snapshot restored the edit camera pose,
+                // the player would see the saved camera (often perched on a car) and freeze.
+                if (Time.frameCount < 30 && !NeonKaido.Driving.Active && Vector3.Distance(transform.position, SpawnPos) > 5f)
+                    PlaceAt(SpawnPos.x, SpawnPos.y, SpawnPos.z, null);
+            }
             Shader.SetGlobalFloat("_SimTime", t);
             NeonKaido.Atmo.PushGlobals();
             // while driving the camera is the player root, so the world systems need the car as focus

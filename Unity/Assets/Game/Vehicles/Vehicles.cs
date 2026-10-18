@@ -621,23 +621,32 @@ namespace NeonKaido
             }
             _proxyNear.Sort((a, b) =>
                 (a.go.transform.position - playerPos).sqrMagnitude.CompareTo((b.go.transform.position - playerPos).sqrMagnitude));
-            for (int i = 0; i < ProxyN; i++)
+            // Assign proxies from the nearest cars, but skip any car the player is already
+            // inside (spawn/teleport overlap). Otherwise the kinematic box encloses the
+            // CharacterController and it cannot move in any direction — the "spawned on a
+            // car and stuck" regression.
+            int slot = 0;
+            for (int i = 0; i < _proxyNear.Count && slot < ProxyN; i++)
             {
-                var go = _proxyGo[i];
-                if (i < _proxyNear.Count)
-                {
-                    var c = _proxyNear[i];
-                    var mf = _models[c.type].mf;
-                    var bc = _proxyCol[i];
-                    bc.size = new Vector3(mf.width * 0.92f, mf.height * 0.80f, mf.length * 0.96f);
-                    bc.center = new Vector3(0f, mf.height * 0.43f, 0f);
-                    var tr = c.go.transform;
-                    if (!go.activeSelf) go.SetActive(true);
-                    _proxyRb[i].position = tr.position;
-                    _proxyRb[i].rotation = tr.rotation;
-                }
-                else if (go.activeSelf) go.SetActive(false);
+                var c = _proxyNear[i];
+                var mf = _models[c.type].mf;
+                var tr = c.go.transform;
+                var local = tr.InverseTransformPoint(playerPos);
+                if (Mathf.Abs(local.x) < mf.width * 0.46f + 0.15f &&
+                    Mathf.Abs(local.z) < mf.length * 0.48f + 0.15f &&
+                    Mathf.Abs(local.y) < mf.height + 0.6f)
+                    continue;
+                var go = _proxyGo[slot];
+                var bc = _proxyCol[slot];
+                bc.size = new Vector3(mf.width * 0.92f, mf.height * 0.80f, mf.length * 0.96f);
+                bc.center = new Vector3(0f, mf.height * 0.43f, 0f);
+                if (!go.activeSelf) go.SetActive(true);
+                _proxyRb[slot].position = tr.position;
+                _proxyRb[slot].rotation = tr.rotation;
+                slot++;
             }
+            for (int i = slot; i < ProxyN; i++)
+                if (_proxyGo[i].activeSelf) _proxyGo[i].SetActive(false);
         }
 
         // ---------------------------------------------------------------- driven car hooks
