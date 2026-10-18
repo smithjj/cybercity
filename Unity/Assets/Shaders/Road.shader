@@ -246,6 +246,11 @@ Shader "NEON KAIDO/Road"
 
             half4 frag(Varyings IN) : SV_TARGET
             {
+                // The road lies exactly in the mirror plane, so in the mirror pass it would render as
+                // a large grazing-angle sheet in the middle of _NkReflTex and the road would then
+                // "reflect itself" as a flat wash instead of the neon above. A real mirror shows
+                // nothing of the plane it is made of.
+                if (_NkReflPass > 0.5) discard;
                 float3 wp = IN.worldPos;
                 float2 P = float2(wp.x, -wp.z); // sim (x, z)
                 float x = P.x, z = P.y;
@@ -531,23 +536,36 @@ Shader "NEON KAIDO/Road"
                 float D = a * a / (3.14159265 * dnm * dnm);
                 float fres = 0.04 + 0.96 * pow(1 - ndv, 5);
                 float spec = D / (4 * ndl * ndv + 0.001) * ndl * fres;
-                // env reflection: the real sky function along the reflected ray, blurred by roughness
+                // env reflection: the real sky function along the reflected ray, blurred by roughness.
+                // Damped because the planar mirror below already carries the whole sky + street; this
+                // is only the roughness-blurred fallback for surfaces the mirror plane cannot show.
                 float3 env = NkHazeColor(reflect(-V, N), _FogColor.xyz, _MidColor.xyz, _ZenithColor.xyz,
                     _GlowMagenta.xyz, _GlowOrange.xyz, _GlowBlue.xyz, _GroundHaze.xyz, _SkyBrightness);
                 float envMix = exp(-oRough * 9.0); // sharp for smooth (wet) surfaces
                 float3 col = oAlb * (_AmbientSky.xyz + _AmbientGround.xyz * 0.5)
                            + _SkyLightColor.xyz * (ndl * oAlb + spec * (metal > 0.5 ? 2 : 1) * 0.25)
-                           + env * envMix * (0.35 + fres * 0.65) * lerp(1, oAlb, metal);
-                col = lerp(col, env * envMix, oPud * 0.85); // puddles are near mirrors
+                           + env * envMix * (0.35 + fres * 0.65) * lerp(1, oAlb, metal) * 0.45;
+                col = lerp(col, env * envMix, oPud * 0.35); // puddles keep a sky term
 
                 // point lights (JS MeshStandard: 92 lamp lights hit the ground too)
                 col += NkBPointLights(N, wp, V, oAlb, oRough, metal, 1);
+
+                // wet-street neon: the analytic streak lobe is now only the vertical smear the
+                // browser's 7-tap pass adds on top of SSR — the mirror itself is NkPlanarRefl below.
+                float gloss = saturate(1.0 - oRough * 6.0);
+                float wet = _Wetness * (1 - dryVar);
+                col += NkWetStreaks(N, wp, V, wet, gloss) * lerp(0.10, 0.28, oPud);
 
                 // scene fog (atmo.js fogNodeFn)
                 float patch = SAMPLE_TEXTURE2D(_Noise, sampler_Noise, wp.xz * 0.0035 + _CloudOffset * 4.0).r * 0.9 + 0.55;
                 col = NkFogApply(col, wp, _WorldSpaceCameraPos.xyz, patch, _Rain * 0.35 + 0.75, _FogColor.xyz, _MidColor.xyz, _ZenithColor.xyz, _GlowMagenta.xyz, _GlowOrange.xyz, _GlowBlue.xyz, _GroundHaze.xyz, _SkyBrightness);
 
-                return half4(NkPost(col, IN.screenUV, _SimTime), 1);
+                float3 colPost = NkPost(col, IN.screenUV, _SimTime);
+                // mirror the street in the water film (browser: half-res SSR). Blended after NkPost
+                // because the mirror buffer is already display-referred.
+                float4 pr = NkPlanarRefl(wp, N, V, lerp(wet, 1.0, oPud * 0.7), max(gloss, oPud), _SimTime);
+                colPost = lerp(colPost, pr.rgb, saturate(pr.a * 0.9));
+                return half4(colPost, 1);
             }
             ENDHLSL
         }

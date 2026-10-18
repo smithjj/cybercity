@@ -120,6 +120,114 @@ float3 NkBPointLights(float3 N, float3 P, float3 V, float3 albedo, float rough, 
     return acc;
 }
 
+// ---- wet-street neon reflection -------------------------------------------------------------
+// The browser gets the signature coloured asphalt from half-res SSR plus a 7-tap vertical smear
+// of it (src/engine/PostFX.js + the streak filter). There is no scene colour buffer to march here
+// and Road.shader's env reflection is only a sky gradient (NkHazeColor), so the asphalt could
+// never reflect signage at all. Instead mirror each point light under the road plane and
+// accumulate an anisotropic specular lobe: tight across the street, long along the view
+// direction — which is exactly what an SSR streak of a sign looks like on wet tarmac.
+//   N     surface normal (up for roads)
+//   V     P - camPos (the sign convention NkBPointLights uses); flipped internally
+//   wet   0 dry .. 1 soaked
+//   gloss 0 rough .. 1 mirror  (puddles push this toward 1)
+float3 NkWetStreaks(float3 N, float3 P, float3 V, float wet, float gloss)
+{
+    if (wet <= 0.01) return float3(0, 0, 0);
+    float3 Ve = -V;                                   // toward the eye
+    float3 R = reflect(-Ve, N);                       // mirror direction for this point
+    float3 T = float3(Ve.x, 0.0, Ve.z);
+    float tl = length(T);
+    T = tl > 1e-4 ? T / tl : float3(0, 0, 1);         // streak axis on the ground
+    float3 B = cross(N, T);                           // across the street
+    // tighter across than along -> the lobe stretches toward the viewer, i.e. vertically on screen
+    float sigAlong = lerp(0.10, 0.30, wet);
+    float sigAcross = lerp(0.020, 0.008, gloss);
+    float iAlong = 1.0 / (2.0 * sigAlong * sigAlong);
+    float iAcross = 1.0 / (2.0 * sigAcross * sigAcross);
+    float3 acc = 0;
+    [loop]
+    for (int i = 0; i < 384; i++)
+    {
+        if (i >= (int)_BLCount) break;
+        float range = max(_BLPos[i].w, 0.01);
+        float3 Lp = _BLPos[i].xyz;
+        if (Lp.y <= 0.05) continue;                   // only lights above the plane reflect
+        float3 toL = Lp - P;
+        float d2 = dot(toL, toL);
+        if (d2 > range * range * 9.0) continue;
+        float d = sqrt(max(d2, 1e-6));
+        float3 L = toL / d;
+        float3 e = L - R;
+        float a = dot(e, T), b = dot(e, B);
+        float lobe = exp(-(a * a * iAlong + b * b * iAcross));
+        // A reflection preserves radiance, so this must NOT use the 1/d^2 irradiance falloff
+        // NkBPointLights uses — the bright core of a reflected sign is as bright as the sign.
+        // The range window supplies locality, plus a mild rolloff for very long grazing shots.
+        float w = saturate(1.0 - pow(min(d / range, 1.0), 4.0));
+        float att = w * w / (1.0 + d * 0.05);
+        acc += _BLColor[i].rgb * _BLColor[i].w * att * lobe;
+    }
+    // the streak carries at most the wet film's fresnel-weighted energy
+    return acc * 0.35 * (0.35 + 0.65 * wet) * (0.25 + 0.75 * gloss);
+}
+
+// ---- planar (mirror) reflection of the street ------------------------------------------------
+// _NkReflTex is the scene rendered from the camera reflected through the ground plane (see
+// NkPlanarReflection.cs). For a point P *on* that plane the mirrored camera sees, in direction of P,
+// exactly what reflects off the asphalt — so projecting P with the mirror camera's view-projection
+// is a true mirror lookup. This is the port's replacement for the browser's half-res SSR + 7-tap
+// vertical wet smear, which the custom shaders could not participate in (they write their own
+// tonemapped colour and never fill HDRP's G-buffer, so HDRP's SSR had nothing to march).
+// The RT already holds display-referred colour (every NEON KAIDO shader applies AgX itself), so the
+// caller must blend the result *after* NkPost, not before.
+TEXTURE2D(_NkReflTex);
+SAMPLER(sampler_NkReflTex);
+float4x4 _NkReflVP;
+float _NkGroundY;
+float _NkReflOn;     // 1 when the mirror buffer is bound and current
+float _NkReflPass;   // 1 while the mirror camera itself is rendering (never read the target)
+
+// rgb = reflected colour, a = blend weight. Zero outside the plane / on dry ground.
+// V must point *toward* the eye (dot(N,V) is the usual N·V), matching Road.shader's V.
+float4 NkPlanarRefl(float3 P, float3 N, float3 V, float wet, float gloss, float time)
+{
+    float4 none = float4(0, 0, 0, 0);
+    if (wet <= 0.01 || _NkReflOn < 0.5 || _NkReflPass > 0.5) return none;
+    float4 clip = mul(_NkReflVP, float4(P, 1.0));
+    if (clip.w <= 0.0) return none;
+    float2 uv = clip.xy / clip.w * 0.5 + 0.5;
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return none;
+    // the water film ripples: distort more when rough (less gloss), less in a mirror-flat puddle
+    float2 rp = P.xz * 1.9 + float2(time * 0.23, time * 0.31);
+    float n1 = NkVnoise(rp), n2 = NkVnoise(rp * 2.7 + 13.1);
+    float2 ripple = (float2(n1, n2) - 0.5) * lerp(0.035, 0.010, saturate(gloss)) * wet;
+    float2 suv = uv + ripple;
+    // PostFX.js ssrStreak: 7 Gaussian taps each way, vertically, so wet asphalt reflections stretch
+    // on screen (anisotropic microfacets). spread = mix(0.0016, 0.0085, smoothstep(0.02,0.45,rough))
+    // * streak * up + 0.0004 — a mirror-sharp planar reflection alone reads as thin hard ribbons,
+    // this is what makes the browser's road a long colourful smear.
+    float spread = lerp(0.0016, 0.0085, saturate(1.0 - gloss)) + 0.0004;
+    float3 acc = SAMPLE_TEXTURE2D(_NkReflTex, sampler_NkReflTex, suv).rgb;
+    float wsum = 1.0;
+    [unroll]
+    for (int k = 1; k <= 7; k++)
+    {
+        float w = exp(-(k * k) / 24.5);          // 2 * 3.5^2, browser's N*0.5
+        float o = spread * (k - 0.5);
+        acc += (SAMPLE_TEXTURE2D(_NkReflTex, sampler_NkReflTex, suv + float2(0, o)).rgb
+              + SAMPLE_TEXTURE2D(_NkReflTex, sampler_NkReflTex, suv - float2(0, o)).rgb) * w;
+        wsum += 2.0 * w;
+    }
+    float3 refl = acc / wsum;
+    // grazing angles reflect more; a puddle (gloss -> 1) is almost a mirror, damp asphalt is not.
+    // The floor keeps a floor-facing wet surface reflecting even when the roughness estimate is high
+    // (PostFX.js does the same: reflectivity = max(metalRefl, gloss * 0.92), never zero on a floor).
+    float fres = pow(1.0 - saturate(dot(N, V)), 5.0);
+    float w = (0.05 + 0.95 * fres) * wet * saturate(0.35 + gloss);
+    return float4(refl, saturate(w));
+}
+
 
 // ---- scene fog: exact port of atmo.js fogNodeFn (height+distance fog, mist patches,
 // ---- neon ground-glow inscatter). patch + rainBoost + fogColor come from the caller
