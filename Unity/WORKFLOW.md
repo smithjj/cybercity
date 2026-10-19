@@ -219,6 +219,7 @@ session. It takes **Unity** coordinates — sim `(x, y, z)` maps to Unity `(x, y
 | `Unreachable code detected (line 14, col 12)` | missing `f` suffix, or `if (x) x=false;` in an eval |
 | Two captures disagree wildly | weather/traffic re-randomised between sessions |
 | Player walks through the stairs | visual steps have no colliders; the ramp collider mirror is wrong (§7) |
+| Trees/rails stretch into long slivers, a dotted grid crawls over the paving | a merged mesh passed 65,535 verts without `indexFormat = UInt32`; UInt16 indices wrap and weld distant triangles (see PORTING.md) |
 | `unity.exe: not found` from a tool | that tool hardcodes `C:/...`; run it from Windows, or use an `nk*` one |
 
 ---

@@ -150,6 +150,9 @@ namespace NeonKaido
         static void Commit(Transform root, string name, LBatch b, Material mat)
         {
             var m = new Mesh { name = name };
+            // lantern_paper runs to a quarter-million verts; without UInt32 the UInt16 index
+            // buffer wraps and shreds the tail into slivers.
+            if (b.V.Count > 65535) m.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
             m.SetVertices(b.V);
             // global winding flip for the sim->unity mirror
             var tris = new int[b.I.Count];

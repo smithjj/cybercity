@@ -80,6 +80,10 @@ namespace NeonKaido
             var idx = new int[n];
             for (int i = 0; i + 2 < n; i += 3) { idx[i] = i; idx[i + 1] = i + 2; idx[i + 2] = i + 1; }
             var m = new Mesh { name = name };
+            // A merged landmark bucket can pass 65535 verts. A UInt16 mesh wraps the excess
+            // indices, welding unrelated triangles into long slivers across the scene, so pick
+            // the index width before assigning the topology.
+            if (n > 65535) m.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
             m.vertices = v;
             m.normals = nn;
             if (uv != null) m.uv = uv; else m.uv = new Vector2[n];

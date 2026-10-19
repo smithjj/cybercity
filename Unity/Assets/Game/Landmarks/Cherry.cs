@@ -61,6 +61,9 @@ namespace NeonKaido
             public Mesh ToMesh(string name)
             {
                 var m = new Mesh { name = name };
+                // Chunks routinely exceed 65k verts; UInt16 would wrap the tail indices and
+                // stitch distant trees together with long slivers.
+                if (Count > 65535) m.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
                 m.vertices = pos.ToArray();
                 m.normals = nor.ToArray();
                 m.uv = uv0.ToArray();
@@ -288,6 +291,9 @@ namespace NeonKaido
                 }
             }
             var m = new Mesh { name = kind + "_petals" };
+            // 14k ground petals alone are 84k verts; UInt16 wraps the tail and drags petal
+            // quads across the whole promenade as long dotted lines.
+            if (pos.Count > 65535) m.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
             m.vertices = pos.ToArray();
             m.normals = nor.ToArray();
             m.uv = uv0.ToArray();

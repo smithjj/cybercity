@@ -599,6 +599,9 @@ namespace NeonKaido
         {
             if (V.Count == 0) return;
             var mesh = new Mesh { name = name };
+            // SignHousing passes 140k verts; a UInt16 index buffer wraps the tail and sprays
+            // stretched housing triangles across the street.
+            if (V.Count > 65535) mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
             mesh.SetVertices(V);
             mesh.SetColors(C);
             mesh.SetIndices(Ix, MeshTopology.Triangles, 0);
