@@ -1,0 +1,247 @@
+# NEON KAIDO — Unity port: working method
+
+How to make a change to the port, verify it, and not corrupt the project. This is the operating
+loop, not the API surface: `README.md` orients, `PORTING.md` is the per-system status ledger plus
+every gotcha hit so far, `EDITOR-CLI.md` is the command reference. Read `PORTING.md` before touching
+anything; read this before *running* anything.
+
+---
+
+## 0. The one fact that explains most confusion
+
+The world is **baked into `Assets/Main.unity`** (~1.03 GB, gitignored). There is no runtime world
+build. Every mesh, collider, light, and per-vertex datum you see came from
+`GameDebug.RunAsync(...)` followed by `save_scene`.
+
+Two consequences:
+
+1. Changing generation code does **nothing** to the scene until you re-run the build *and* save.
+   The scene can happily render a weeks-old world while the code looks correct — and it will do so
+   again the moment it reloads from disk.
+2. Anything not serializable — light arrays, shader globals, `MaterialPropertyBlock`s — is **gone on
+   load** and has to be pushed again by something at load time (§5).
+
+The corollary for diagnosis: before believing either the code or the picture, work out which of the
+two is stale.
+
+---
+
+## 1. Layout
+
+| Path | What it is |
+|---|---|
+| `src/` (repo root) | The browser game. The **reference implementation**; when the two disagree, `src/` is right unless proven otherwise. |
+| `Unity/Assets/Game/**` | Runtime code, by system: `Buildings/`, `Signage/`, `Vehicles/`, `Gameplay/`, `Weather/`, `Landmarks/`, `Crowd/`, `Audio/`, `Core/`. |
+| `Unity/Assets/Shaders/*.shader` | Custom HLSL. Mostly ignores Unity's own lighting; see §5. |
+| `Unity/Assets/Editor/GameDebug.cs` | The build + debug facade that everything drives from the CLI. |
+| `Unity/Assets/Editor/NkEditorLighting.cs` | Edit-mode push of the light arrays and atmosphere globals, plus the post-import re-push. |
+| `Unity/Assets/Settings/Materials/*.mat` | Tracked, so edits there are durable. The scene is not. |
+| `Unity/Temp/` | Scratch and gitignored: captures, oracle dumps, decompressed logs. |
+
+---
+
+## 2. Driving the editor
+
+Binary, from WSL: `/mnt/c/Users/smith/AppData/Local/Unity/bin/unity.exe`.
+
+`Unity/tools/` is split, and this matters: the `nk*` helpers use the `/mnt/c/...` path and run under
+WSL. The older ones (`ev.sh`, `console.sh`, `shot.sh`, `snap.sh`, `preflight.sh`, `run-oracle.sh`)
+hardcode `C:/Users/...` and only work from a Windows shell — under WSL they fail with
+`not found`.
+
+Two budgets:
+
+- `eval` runs on the main thread with about **5 s**. Exceed it and you get
+  `Main thread operation timed out after 5000ms`. Never `Thread.Sleep` inside an eval.
+- Long work goes through `GameDebug.RunAsync(which)`, which defers to an `EditorApplication.update`
+  callback. Fire it, then poll `AsyncBusy` / `AsyncResult`.
+
+Targets: `buildings | landmarks | atmosphere | ground | signage | vehicles | weather | crowd | gameplay | audiostep | all`.
+**`all` does not include buildings** — run `buildings` first when a change touches them.
+
+```sh
+U=/mnt/c/Users/smith/AppData/Local/Unity/bin/unity.exe
+$U --no-banner command eval 'return NeonKaido.EditorTools.GameDebug.RunAsync("buildings");'
+sleep 60
+$U --no-banner command eval 'return "busy="+NeonKaido.EditorTools.GameDebug.AsyncBusy+" | "+NeonKaido.EditorTools.GameDebug.AsyncResult;'
+```
+
+Also useful: `GameDebug.Ensure()` (creates the `/Game` context object),
+`NeonKaido.Gameplay.Describe()` (current gig / zone / HUD state), and `GameDebug.Health()` (pipeline
+health — what `preflight.sh` checks).
+
+### Eval-snippet traps
+
+Both of these cost real time and both produce a diagnostic that has nothing to do with the problem:
+
+- **Float literals need the `f` suffix.** `-0.38*Mathf.Rad2Deg` fails to compile and the error reads
+  `Unreachable code detected (line 14, col 12)`.
+- **Don't write `if (pc.enabled) pc.enabled = false;`** — same bogus diagnostic. A plain
+  `pc.enabled=false;` works.
+
+---
+
+## 3. The two loops
+
+### A. World change
+
+Generation code, layout, props, anything baked into the scene:
+
+1. edit → `$U --no-banner recompile --focus`
+2. confirm the compile is clean (§4)
+3. `RunAsync("buildings")` → poll; then `RunAsync("all")` → poll
+4. verify **before** saving (§4)
+5. `$U --no-banner command save_scene --timeout 1800` — minutes, ~1 GB. Do it once, and do not stack
+   heavy work on the editor while it runs; it has crashed under load before.
+6. `open_scene --path Assets/Main.unity --timeout 1800` and spot-check that the change survived
+
+### B. Code-only change
+
+Shaders, runtime behaviour, HUD, gameplay logic: recompile and Play. Nothing needs baking. But note
+that shader *properties* live on the material assets, and anything derived from generated data only
+shows up through loop A.
+
+---
+
+## 4. Verification, in increasing order of trust
+
+Cheap and decisive beats "looks right".
+
+- **Compile.** `$U --no-banner command console --tail 10 --level error`, and read
+  `groundTruth.compilationFailed` / `compiling` in the JSON rather than trusting the entry list.
+- **Numeric probe over a picture.** A small `eval` settled every real bug this session:
+  - a *single* sign quad's UVs — a union over all 8320 verts spans the whole atlas even when every
+    quad is wrong, so the union is not a staleness test;
+  - `Physics.Raycast` down the alley stairs to read the actual collision surface against
+    `GroundPlan.HeightAt`;
+  - a census of colliders by rotation type (2647 axis-aligned, 98 yaw-only, 2 tilted — which is how
+    the stairs bug was scoped down to the only two quaternion-rotated colliders in the city).
+- **Diff frames.** Capture twice with `tools/nkcap.sh` and compare in Python/PIL: a mean difference
+  plus a pixel count over a threshold is far more honest than eyeballing two PNGs. A lamp A/B that
+  "looked fine" turned out to be a zero-difference null result until the capture stopped writing into
+  `Assets/`.
+- **Reload from disk.** `open_scene`, then re-probe. This is the only proof that a bake persisted.
+
+Do not verify by looking at the viewport alone until §5 is satisfied.
+
+---
+
+## 5. The lighting is not serializable — read this before judging the port
+
+`_BLPos` / `_BLColor` / `_BLCount` are uploaded with `SetVectorArray` on each material (plus
+`_CarLPos` / `_CarLColor` / `_CarLCount`), and the fog/haze constants are shader globals. None of it
+survives a scene load, and `.mat` assets do not serialize it either. On a freshly loaded scene there
+are **zero point lights**: `NkBPointLights()` breaks out of its loop immediately, so lamp lenses look
+lit (their emissive lives in the material) while casting nothing, sign backing panels go black, and
+distance falls to black. That is exactly the "broken in the editor but fine in Play" report.
+
+Two mitigations, both in the editor assembly:
+
+- **`NkEditorLighting`** pushes `Atmo.PushGlobals()` + `BuildingsRuntime.PushSceneLights()` on scene
+  open/save/hierarchy change, so the edit-mode viewport is representative of the game.
+- **`NkLightArrayGuard`** is an `AssetPostprocessor`: any asset import reimports the dirty `.mat`
+  assets and wipes every runtime-set property, so it re-pushes after imports.
+
+**Consequence for captures.** Never use `capture_game_view --save_path`. It forces the PNG into
+`Assets/Temp/`, which triggers exactly that import, wipes the light arrays mid-session and races the
+guard. `tools/nkcap.sh` takes the command's inline base64 instead and never touches the asset
+database. `--source screen` includes the HUD; `--source camera` does not.
+
+---
+
+## 6. Measuring lighting without lying to yourself
+
+Weather and traffic re-randomise on every Play, so two frames from different sessions are not
+comparable. `tools/nk-lights.sh <mode>` freezes `Time.timeScale`, hides `/VehiclesRoot` `/Crowd`
+`/Gameplay`, zeroes `_CarLCount`, and pushes a chosen light set:
+
+| mode | effect |
+|---|---|
+| `all` | rank every scene light, keep the best 384 |
+| `nolamp` | same ranking and order, every `/StreetLamps` light zeroed |
+| `lamps` | only the street lamps contribute |
+| `reset` | thaw: everything re-enabled, `timeScale = 1` |
+
+- Always `reset` before handing the session back.
+- **Never save while the debug levers are set** — a save bakes inactive roots and a disabled
+  `PlayerController` into the scene. (A `RunAsync("buildings")` rebuild does incidentally recreate
+  those roots active.)
+
+`tools/nkpose.sh <unityX> <unityZ> <yawRad> <pitchRad> [fov]` poses the play camera and freezes the
+session. It takes **Unity** coordinates — sim `(x, y, z)` maps to Unity `(x, y, −z)`, so pass `−simZ`
+— and radians. Yaw 0 faces north (+Z, down the avenue); positive pitch looks down.
+
+---
+
+## 7. Conventions
+
+- Coordinates: sim `(x, y, z)` → Unity `(x, y, −z)`. North is **+Z**.
+- `GameDebug.PoseCam` takes sim yaw and negates it internally. `PlayerController.Yaw` / `.Pitch` are
+  radians, and positive pitch looks **down**.
+- `PlayerController.Teleport(x, y, z)` takes Unity coords, starts at `y`, and raycasts down to ground.
+- `GroundPlan.HeightAt(simX, simZ)` is the analytic ground profile used for snapping, not a model of
+  the geometry: it treats the alley staircase as one 22 m ramp while the visual geometry is two
+  flights with a landing. Do not use it to validate collision.
+- Tilted colliders: `BCollider.Rot` is a **sim-space** quaternion. Mirroring z maps a rotation of θ
+  about axis `a` to −θ about `(a.x, a.y, −a.z)`, i.e. `(x, y, z, w) → (−x, −y, z, w)`. Negating `z`
+  instead is a different map that flips the sign of a Z rotation — that was the alley stairs bug
+  (walk straight through the steps). `RotY` is a separate yaw-only path.
+
+---
+
+## 8. Comparing against the browser
+
+- `src/` is the reference. Port numbers and behaviour from it; don't invent.
+- Canonical framings are in `src/world/layout.js` → `SHOT_VIEWS`: `street`, `overlook`, `river`,
+  `alley`, `aerial`, `ground`. Each carries a `desc` naming the reference panel. Pose Unity to the
+  mirrored position and compare like for like.
+- **Oracles are the strongest tool here.** `node Unity/tools/dump-*.mjs` runs the *actual JS*
+  headlessly into `Temp/oracle/*.json`; `run-oracle.sh <OracleClass> [arg]` then compares the C#
+  output against it, often to the last bit of a double. Use it before trusting any generation
+  rewrite, and note it only covers the systems with a dump: buildings (incl. alley / overlook /
+  props / shops stages), ground geometry, mulberry32, noise textures.
+- Running the browser for a screenshot is impractical in this environment: it needs WebGPU, and
+  headless Chrome renders the loading screen and never finishes the world build under software
+  rasterisation. Ask the user for a browser screenshot rather than burning time on it. There is no
+  alley reference image in the repo.
+
+---
+
+## 9. Traps that cost time
+
+| Symptom | Cause |
+|---|---|
+| Port renders an old world while the code looks right | stale bake — rebuild **and** save (§0) |
+| Signs show the whole atlas / glyph gibberish | per-quad UVs are local 0..1; check one quad, not the union |
+| Viewport has no point lights, black sign backings | light arrays not pushed (§5) |
+| City goes dark a second into a capture | asset import wiped the arrays; use `nkcap.sh`, not `--save_path` |
+| `GetFloat("_BLCount")` logs an error | it isn't in `Properties{}`; `GetVectorArray` does not error, `GetFloat` does — don't probe with `GetFloat` |
+| `Unreachable code detected (line 14, col 12)` | missing `f` suffix, or `if (x) x=false;` in an eval |
+| Two captures disagree wildly | weather/traffic re-randomised between sessions |
+| Player walks through the stairs | visual steps have no colliders; the ramp collider mirror is wrong (§7) |
+| `unity.exe: not found` from a tool | that tool hardcodes `C:/...`; run it from Windows, or use an `nk*` one |
+
+---
+
+## 10. Repo hygiene
+
+- Never commit `Unity/Assets/Main.unity` (gitignored) or `Assets/Temp*`.
+- Keep root junk out of commits: `nul`, `screenshot-browsergame.png`, `NEON-AUDIT-browser.md`,
+  `Unity/F8-dump.txt`, `Unity/unity-*-screenshot*.png`, `Unity/pinktexture-cars.png`, session exports.
+- Commit style is imperative subject plus a body carrying the *why* and the evidence — measured
+  numbers, before/after tables, and the reasoning that scoped the bug. The history doubles as the
+  design record, so write it for whoever reads it next.
+- `Unity/Temp/` is scratch; captures, dumps and decompressed logs live there.
+
+---
+
+## 11. Handoff checklist
+
+Before ending a session:
+
+- [ ] editor in **edit mode**, not Play — a Play session leaves the debug levers set
+- [ ] `tools/nk-lights.sh reset` if anything was frozen or hidden
+- [ ] every world rebuild saved via `save_scene` and re-verified by `open_scene`
+- [ ] `console --level error` clean apart from known noise
+- [ ] `git status` shows only intentional changes
+- [ ] open threads and next steps written down (here, in `PORTING.md`, or in the commit body)

@@ -1,8 +1,9 @@
 #!/bin/sh
-# nkpose.sh <simX> <simZ> <yaw> <pitch> [fov] — pose the play-mode camera and FREEZE the session:
+# nkpose.sh <unityX> <unityZ> <yawRad> <pitchRad> [fov] — pose the play-mode camera and FREEZE the session:
 # the PlayerController is left disabled (nothing re-pushes the light arrays / advances weather or
 # traffic) and /VehiclesRoot /Crowd /Gameplay are hidden so no car headlight can be mistaken for a
 # lamp pool. Re-pose with nkpose.sh, thaw with `nk-lights.sh reset`.
+#   Coordinates are UNITY space, not sim: sim (x, y, z) -> unity (x, y, -z), so pass -simZ here.
 #   yaw 0 = face north (+Z, down the avenue); positive pitch = look down.
 # NOTE: float literals need the f suffix — a bare `-0.38*Mathf.Rad2Deg` makes the whole eval
 # snippet fail to compile with a confusing "Unreachable code detected" diagnostic.

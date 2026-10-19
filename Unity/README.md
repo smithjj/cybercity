@@ -58,6 +58,8 @@ Key conventions (full details in `PORTING.md` § Conventions):
 
 ## Documentation
 
+- `WORKFLOW.md` — the operating loop: how to change, verify and persist anything,
+  and the traps that waste a session (start here for a handoff).
 - `PORTING.md` — the status ledger: per-system entries, verified numbers, and
   every gotcha hit along the way (read this before touching anything).
 - `PORTING-PLAN.md` — the phased plan the port followed.
@@ -68,6 +70,10 @@ Key conventions (full details in `PORTING.md` § Conventions):
 
 - `tools/ev.sh '<C# expr>'` — eval a snippet in the live editor.
 - `tools/console.sh [n] [type]` — read editor console entries.
+- `tools/nkcap.sh <name>` — capture the game camera without writing into `Assets/`
+  (a `--save_path` capture triggers an import that wipes the light arrays).
+- `tools/nkpose.sh` / `nk-lights.sh` — freeze the session, pose the camera, and A/B
+  a chosen set of point lights; thaw with `nk-lights.sh reset`.
 - `tools/dump-*.mjs` — node oracle dumps that mirror the JS systems for
   verification (buildings, ground, signage, koi, cherry, mulberry32, noise).
 - `Temp/shots/` — verification captures (avenue, panorama, river, rail, cherry,
