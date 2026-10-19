@@ -181,36 +181,12 @@ namespace NeonKaido
             foreach (var l in Object.FindObjectsOfType<Light>()) l.enabled = false;
         }
 
+        // The light arrays are not serialized, so they are pushed here once per session. Anything
+        // that reimports the material assets mid-session (the Editor writes PNGs under Assets/ for
+        // its captures) drops them again; NkEditorLighting watches for that and re-pushes.
         static void EnsureLightArrays()
         {
-            var lights = new System.Collections.Generic.List<Light>();
-            foreach (var rn in new[] { "/Buildings", "/StreetLamps", "/Signage", "/FacadeSigns", "/LandmarksRiver", "/LandmarksRail", "/LandmarksExpress", "/LandmarksBridge" })
-            {
-                var root = GameObject.Find(rn);
-                if (root != null) lights.AddRange(root.GetComponentsInChildren<Light>());
-            }
-            if (lights.Count == 0) return;
-            const int budget = NeonKaido.BuildingsRuntime.LightArraySize;
-            if (lights.Count > budget)
-            {
-                // Rank by reach*intensity so lamps and signs both survive; the tail is dropped.
-                lights.Sort((a, b) =>
-                {
-                    float ka = (a.color.r + a.color.g + a.color.b) * a.intensity * a.range;
-                    float kb = (b.color.r + b.color.g + b.color.b) * b.intensity * b.range;
-                    return kb.CompareTo(ka);
-                });
-                lights.RemoveRange(budget, lights.Count - budget);
-            }
-            var pos = new Vector4[lights.Count];
-            var col = new Vector4[lights.Count];
-            for (int i = 0; i < lights.Count; i++)
-            {
-                var l = lights[i];
-                pos[i] = new Vector4(l.transform.position.x, l.transform.position.y, l.transform.position.z, l.range);
-                col[i] = new Vector4(l.color.r, l.color.g, l.color.b, l.intensity);
-            }
-            NeonKaido.BuildingsRuntime.PushLightArrays(pos, col, new System.Collections.Generic.List<Material>(), null);
+            BuildingsRuntime.PushSceneLights();
         }
 
         // Drop the player onto the highest surface under (x,z) (spawn / elevators / respawn).

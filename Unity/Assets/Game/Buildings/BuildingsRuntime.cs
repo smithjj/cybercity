@@ -308,6 +308,52 @@ namespace NeonKaido
             return m;
         }
 
+        /// Every root that owns point lights the fake city lighting accumulates. Shared so the
+        /// runtime (PlayerController.Start) and the Editor (NkEditorLighting) rank the same set.
+        public static readonly string[] SceneLightRoots =
+        {
+            "/Buildings", "/StreetLamps", "/Signage", "/FacadeSigns",
+            "/LandmarksRiver", "/LandmarksRail", "/LandmarksExpress", "/LandmarksBridge",
+        };
+
+        /// Rank every light in the city and upload the best `LightArraySize` to every NEON KAIDO
+        /// material. The arrays are not serialized, so this has to run again at runtime AND in the
+        /// Editor: opening Assets/Main.unity without it shows _BLCount = 0 — a city whose lamps are
+        /// visibly lit but cast nothing, because NkBPointLights() breaks out of its loop immediately.
+        /// Returns a description for the debug CLI.
+        public static string PushSceneLights()
+        {
+            var lights = new List<Light>();
+            foreach (var rn in SceneLightRoots)
+            {
+                var root = GameObject.Find(rn);
+                if (root != null) lights.AddRange(root.GetComponentsInChildren<Light>(true));
+            }
+            if (lights.Count == 0) return "0 lights (world not built?)";
+            int found = lights.Count;
+            if (lights.Count > LightArraySize)
+            {
+                // Rank by reach*intensity so lamps and signs both survive; the tail is dropped.
+                lights.Sort((a, b) =>
+                {
+                    float ka = (a.color.r + a.color.g + a.color.b) * a.intensity * a.range;
+                    float kb = (b.color.r + b.color.g + b.color.b) * b.intensity * b.range;
+                    return kb.CompareTo(ka);
+                });
+                lights.RemoveRange(LightArraySize, lights.Count - LightArraySize);
+            }
+            var pos = new Vector4[lights.Count];
+            var col = new Vector4[lights.Count];
+            for (int i = 0; i < lights.Count; i++)
+            {
+                var l = lights[i];
+                pos[i] = new Vector4(l.transform.position.x, l.transform.position.y, l.transform.position.z, l.range);
+                col[i] = new Vector4(l.color.r, l.color.g, l.color.b, l.intensity);
+            }
+            PushLightArrays(pos, col, new List<Material>(), null);
+            return $"{lights.Count}/{found} lights";
+        }
+
         // SetVectorArray data is NOT serialized in .mat assets — re-push after every reload.
         // Pushes to the given materials PLUS every scene material using a NEON KAIDO shader.
         public static void PushLightArrays(Vector4[] blPos, Vector4[] blCol, List<Material> extra, Material acMat)
