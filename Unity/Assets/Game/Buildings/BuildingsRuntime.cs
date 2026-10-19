@@ -268,7 +268,17 @@ namespace NeonKaido
                 var go = new GameObject("col");
                 go.transform.SetParent(colRoot.transform, false);
                 go.transform.position = new Vector3((float)bc.X, (float)bc.Y, (float)-bc.Z);
-                if (bc.Rot != null) go.transform.rotation = new Quaternion((float)bc.Rot[0], (float)bc.Rot[1], (float)-bc.Rot[2], (float)bc.Rot[3]);
+                if (bc.Rot != null)
+                {
+                    // bc.Rot is authored in sim space. Mirroring z (sim z -> -z) maps a rotation of
+                    // theta about axis a to one of -theta about (a.x, a.y, -a.z), which in quaternion
+                    // terms is (x,y,z,w) -> (-x,-y,z,w). Negating z instead (what this did) is not the
+                    // same map: it happens to agree for a pure X or Y rotation but flips the sign of a
+                    // Z one, so the two alley stair ramps sloped up toward +x while the stairs climb
+                    // toward -x. With the ramps inverted the player walked off the bottom of the flight
+                    // straight through the steps, which have no colliders of their own.
+                    go.transform.rotation = new Quaternion((float)-bc.Rot[0], (float)-bc.Rot[1], (float)bc.Rot[2], (float)bc.Rot[3]);
+                }
                 else if (bc.RotY != 0) go.transform.rotation = Quaternion.Euler(0, (float)bc.RotY * Mathf.Rad2Deg, 0);
                 var box = go.AddComponent<BoxCollider>();
                 box.size = new Vector3((float)(bc.Hx * 2), (float)(bc.Hy * 2), (float)(bc.Hz * 2));
