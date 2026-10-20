@@ -92,6 +92,8 @@ namespace NeonKaido
         {
             public string type; public Color paint; public GameObject go; public MaterialPropertyBlock mpb;
             public CarVisual visual;
+            public MeshFilter mf; public MeshRenderer mr;
+            public bool lodNear;
             public float s, v, v0, len, spin, brake;
             public Lane lane;
             // sky
@@ -100,6 +102,9 @@ namespace NeonKaido
         }
 
         static Dictionary<string, (Mesh l2, Mesh l3, Manifest mf)> _models;
+        // Highest-detail showroom LOD, loaded lazily; only kei has a `_l0` dump.
+        static Dictionary<string, Mesh> _showcase;
+        static readonly HashSet<string> _showcaseTried = new();
         static Dictionary<string, Material> _mats;
         static Lane[] _lanes;
         static List<Car> _cars, _sky;
@@ -161,6 +166,9 @@ namespace NeonKaido
                 }
             }
             var m = new Mesh { name = $"car_{type}{suffix}" };
+            // The dumper emits a non-indexed tri soup. LOD0 (264k verts) and LOD1 (73k
+            // verts) are past Unity's 65,535-vertex default, so opt into 32-bit indices.
+            if (mp.Length > 65535) m.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
             m.vertices = mp; m.normals = mn; m.uv = mu;
             m.SetUVs(1, m1); m.SetUVs(2, m2);
             var idx = new int[mp.Length];
@@ -170,13 +178,56 @@ namespace NeonKaido
             return m;
         }
 
+        /// Kei parked/showroom cars use the translucent-glass material. The near traffic LOD
+        /// (LOD1) also has the interior, so it can use the same glass; the far traffic LOD
+        /// (LOD2) has no interior and stays on the opaque material.
+        static Material CarMaterial(string type, string suffix)
+        {
+            if (suffix == "_l3") return _mats["car3"];
+            if (type == "kei" && _mats.TryGetValue("carGlass", out var glass) && glass != null) return glass;
+            return _mats["car"];
+        }
+
+        // The browser fleet fades LOD0/LOD1/LOD2 at [16, 45, 110] m. The Unity dump has two
+        // street levels for every type, so traffic switches at 45 m — the browser's LOD1
+        // boundary — with a small hysteresis band so a car parked at the threshold does not
+        // flip mesh/material every frame. Near kei traffic gets LOD1 plus its interior and
+        // the translucent-glass material; far traffic stays on LOD2 + the opaque car3 material.
+        const float TRAFFIC_LOD_NEAR = 45f;
+        const float TRAFFIC_LOD_HYST = 3f;
+
+        static void SetTrafficLod(Car c, bool near)
+        {
+            if (c == null || c.go == null || c.type == null || _models == null || !_models.ContainsKey(c.type)) return;
+            if (c.mf == null) c.mf = c.go.GetComponent<MeshFilter>();
+            if (c.mr == null) c.mr = c.go.GetComponent<MeshRenderer>();
+            if (c.mf == null || c.mr == null) return;
+            c.mf.sharedMesh = near ? _models[c.type].l2 : _models[c.type].l3;
+            c.mr.sharedMaterial = near ? CarMaterial(c.type, "") : _mats["car3"];
+            c.lodNear = near;
+        }
+
+        static void UpdateTrafficLods(Vector3 camPos)
+        {
+            if (_cars == null) return;
+            float enter = TRAFFIC_LOD_NEAR - TRAFFIC_LOD_HYST; enter *= enter;
+            float leave = TRAFFIC_LOD_NEAR + TRAFFIC_LOD_HYST; leave *= leave;
+            foreach (var c in _cars)
+            {
+                if (c.go == null) continue;
+                float d2 = (c.go.transform.position - camPos).sqrMagnitude;
+                bool wantNear = c.lodNear ? d2 < leave : d2 < enter;
+                if (wantNear != c.lodNear) SetTrafficLod(c, wantNear);
+            }
+        }
+
         static GameObject SpawnCar(Transform parent, string type, string suffix, string name)
         {
             var go = new GameObject(name);
             go.transform.SetParent(parent, false);
             go.AddComponent<MeshFilter>().sharedMesh = suffix == "_l3" ? _models[type].l3 : _models[type].l2;
             var r = go.AddComponent<MeshRenderer>();
-            r.sharedMaterial = _mats[suffix == "_l3" ? "car3" : "car"];
+            r.sharedMaterial = CarMaterial(type, suffix);
             // Serialized home for the per-renderer look (see CarVisual): property blocks do not
             // survive a scene load, so without this every car came back black with dead lamps.
             var cv = go.AddComponent<CarVisual>();
@@ -238,6 +289,15 @@ namespace NeonKaido
                 if (sh == null) return "vehicles: shader missing";
                 _mats["car"] = new Material(sh);
                 _mats["car3"] = new Material(sh);
+                // Kei parked/showroom cars use the translucent-glass variant; the material is
+                // shared, and per-car paint/lights still go through the property block.
+                var shGlass = Shader.Find("NEON KAIDO/VehicleCarGlass");
+                if (shGlass != null)
+                {
+                    var glass = new Material(shGlass) { name = "VehicleCarGlass" };
+                    glass.SetFloat("_GlassAlpha", 0.58f);
+                    _mats["carGlass"] = glass;
+                }
             }
             var dir = "Assets/Game/Models/Vehicles/dump";
             foreach (var type in new[] { "hero", "kei", "taxi", "van", "av" })
@@ -255,12 +315,29 @@ namespace NeonKaido
         public static Color[] PaletteFor(string type) =>
             Palette.TryGetValue(type, out var p) && p != null && p.Length > 0 ? p : new[] { Color.white };
 
+        /// Highest-detail `_l0` mesh for showroom/delivery, loaded on first use.
+        /// Only kei ships one; every other type falls back to its parked mesh.
+        static Mesh ShowcaseMesh(string type)
+        {
+            if (_showcase != null && _showcase.TryGetValue(type, out var cached)) return cached;
+            if (_showcaseTried.Contains(type)) return null;
+            _showcaseTried.Add(type);
+            string dir = "Assets/Game/Models/Vehicles/dump";
+            if (!System.IO.File.Exists($"{dir}/veh_{type}_l0_pos.bin")) return null;
+            var mesh = LoadCar(type, "_l0");
+            if (_showcase == null) _showcase = new Dictionary<string, Mesh>();
+            _showcase[type] = mesh;
+            return mesh;
+        }
+
         /// One display-only car (no collider, not in the traffic/parked lists).
         public static GameObject SpawnShowcase(Transform parent, string type, Vector3 pos, float yawDeg, Color paint, Vector3 lights)
         {
             if (!ModelsReady) LoadModels();
             if (!ModelsReady || !_models.ContainsKey(type)) return null;
             var go = SpawnCar(parent, type, "", "gallery_" + type);
+            var hi = ShowcaseMesh(type);
+            if (hi != null) go.GetComponent<MeshFilter>().sharedMesh = hi;
             go.transform.SetPositionAndRotation(pos, Quaternion.Euler(0f, yawDeg, 0f));
             go.transform.localScale = Vector3.one;
             SetCarLook(go, paint, 0f, lights);
@@ -556,6 +633,9 @@ namespace NeonKaido
                 {
                     var go = SpawnCar(parent, c.type, "_l3", $"car_{count}");
                     c.go = go;
+                    c.mf = go.GetComponent<MeshFilter>();
+                    c.mr = go.GetComponent<MeshRenderer>();
+                    c.lodNear = false;
                     c.mpb = new MaterialPropertyBlock();
                     PlaceCar(c);
                     count++;
@@ -670,6 +750,10 @@ namespace NeonKaido
                 {
                     c.go = trT.transform.GetChild(i++).gameObject;
                     c.mpb = new MaterialPropertyBlock();
+                    c.mf = null; c.mr = null;
+                    // The saved scene always holds the far traffic mesh; normalise after a
+                    // domain reload before the first distance test runs.
+                    SetTrafficLod(c, false);
                 }
             int j = 0;
             foreach (var c in _sky)
@@ -809,6 +893,7 @@ namespace NeonKaido
             }
             if (!_linked || _cars.Count == 0 || _cars[0].go == null) { if (!TryLink()) return; }
             HealParkedPaint();
+            var camPos = Camera.main != null ? Camera.main.transform.position : playerPos;
             foreach (var lane in _lanes)
             {
                 var cars = lane.cars;
@@ -858,13 +943,17 @@ namespace NeonKaido
                     c.brake = acc < -0.8f || c.v < 0.3f ? 1f : 0f;
                     if (c.s > lane.len) c.s -= lane.len;
                     float wr = _models[c.type].mf.wheelRadius;
-                    c.spin -= (c.v * dt) / (wr != 0 ? wr : 0.33f);
+                    // The Unity mesh is the z-mirrored bake (forward +Z), so forward travel is
+                    // a POSITIVE rotation about car-local +X. This used to be copied from the
+                    // browser (`spin -=`, where forward is -Z) and every traffic wheel rolled
+                    // backwards; the driven/delivery cars already use the positive convention.
+                    c.spin = Mathf.Repeat(c.spin + (c.v * dt) / (wr != 0 ? wr : 0.33f), Mathf.PI * 2f);
                 }
                 foreach (var c in cars) PlaceCar(c);
             }
             foreach (var c in _sky) PlaceSkyCar(c, t);
             UpdateProxies(playerPos);
-            var camPos = Camera.main != null ? Camera.main.transform.position : playerPos;
+            UpdateTrafficLods(camPos);
             PushCarLights(camPos);
             DrawBeams(camPos);
             DrawPools(camPos);
