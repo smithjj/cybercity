@@ -58,7 +58,11 @@ namespace NeonKaido
         {
             if (_paintHealed) return;
             _paintHealed = true;
-            foreach (var r in Object.FindObjectsByType<Renderer>(FindObjectsSortMode.None))
+            // Cars carry their look in a CarVisual now; re-apply it first so the hash fallback
+            // below only fires for objects that predate the component (or were spawned without it).
+            // Property blocks are not serialized, so after a load every renderer starts blank.
+            foreach (var cv in Object.FindObjectsByType<CarVisual>(FindObjectsInactive.Exclude)) cv.Apply();
+            foreach (var r in Object.FindObjectsByType<Renderer>(FindObjectsInactive.Exclude))
             {
                 var nm = r.gameObject.name;
                 if (!nm.StartsWith("parked_")) continue;
@@ -87,6 +91,7 @@ namespace NeonKaido
         class Car
         {
             public string type; public Color paint; public GameObject go; public MaterialPropertyBlock mpb;
+            public CarVisual visual;
             public float s, v, v0, len, spin, brake;
             public Lane lane;
             // sky
@@ -172,7 +177,46 @@ namespace NeonKaido
             go.AddComponent<MeshFilter>().sharedMesh = suffix == "_l3" ? _models[type].l3 : _models[type].l2;
             var r = go.AddComponent<MeshRenderer>();
             r.sharedMaterial = _mats[suffix == "_l3" ? "car3" : "car"];
+            // Serialized home for the per-renderer look (see CarVisual): property blocks do not
+            // survive a scene load, so without this every car came back black with dead lamps.
+            var cv = go.AddComponent<CarVisual>();
+            cv.type = type;
+            cv.length = _models[type].mf.length;
             return go;
+        }
+
+        // ---------------------------------------------------------------- per-car look
+        // The property block is the render side; the CarVisual copy is what the scene saves.
+        // Everything that gives a car its individuality (paint, wheel spin, lamp level) has to
+        // go through here or it will be missing again the next time Main.unity is opened.
+
+        static void SetCarLook(GameObject go, Color paint, float spin, Vector3 lv)
+        {
+            var r = go.GetComponent<MeshRenderer>();
+            if (r != null)
+            {
+                var mpb = new MaterialPropertyBlock();
+                mpb.SetColor("_PaintColor", paint);
+                mpb.SetFloat("_Spin", spin);
+                mpb.SetVector("_LightLv", lv);
+                r.SetPropertyBlock(mpb);
+            }
+            var cv = go.GetComponent<CarVisual>();
+            if (cv != null) cv.Set(paint, spin, lv);
+        }
+
+        // Reuses the Car's own block: this runs for every traffic car every frame.
+        static void PushCarLook(Car c, Vector3 lv)
+        {
+            if (c.go == null) return;
+            if (c.mpb == null) c.mpb = new MaterialPropertyBlock();
+            c.mpb.SetColor("_PaintColor", c.paint);
+            c.mpb.SetFloat("_Spin", c.spin);
+            c.mpb.SetVector("_LightLv", lv);
+            var r = c.go.GetComponent<MeshRenderer>();
+            if (r != null) r.SetPropertyBlock(c.mpb);
+            if (c.visual == null) c.visual = c.go.GetComponent<CarVisual>();
+            if (c.visual != null) c.visual.Set(c.paint, c.spin, lv);
         }
 
         // ---------------------------------------------------------------- build
@@ -219,11 +263,7 @@ namespace NeonKaido
             var go = SpawnCar(parent, type, "", "gallery_" + type);
             go.transform.SetPositionAndRotation(pos, Quaternion.Euler(0f, yawDeg, 0f));
             go.transform.localScale = Vector3.one;
-            var mpb = new MaterialPropertyBlock();
-            mpb.SetColor("_PaintColor", paint);
-            mpb.SetFloat("_Spin", 0f);
-            mpb.SetVector("_LightLv", lights);
-            go.GetComponent<MeshRenderer>().SetPropertyBlock(mpb);
+            SetCarLook(go, paint, 0f, lights);
             return go;
         }
 
@@ -341,11 +381,7 @@ namespace NeonKaido
                 go.transform.position = new Vector3(x, 0, -z);
                 go.transform.rotation = Quaternion.Euler(0, -yawSim * Mathf.Rad2Deg, 0);
                 go.transform.localScale = Vector3.one;
-                var mpb = new MaterialPropertyBlock();
-                mpb.SetColor("_PaintColor", paint);
-                mpb.SetFloat("_Spin", 0);
-                mpb.SetVector("_LightLv", Vector3.zero);
-                go.GetComponent<MeshRenderer>().SetPropertyBlock(mpb);
+                SetCarLook(go, paint, 0f, Vector3.zero);
                 var rec = new ParkedCar { type = type, name = go.name, go = go };
                 AddCarCollider(rec);
                 _parked.Add(rec);
@@ -387,11 +423,7 @@ namespace NeonKaido
                 var go = SpawnCar(parent, "hero", "", "parked_hero");
                 go.transform.position = new Vector3(curbX, 0, -15f);
                 go.transform.rotation = Quaternion.Euler(0, 0, 0);
-                var mpb = new MaterialPropertyBlock();
-                mpb.SetColor("_PaintColor", new Color(0x07 / 255f, 0x07 / 255f, 0x0a / 255f));
-                mpb.SetFloat("_Spin", 0);
-                mpb.SetVector("_LightLv", new Vector3(1, 1, 0));
-                go.GetComponent<MeshRenderer>().SetPropertyBlock(mpb);
+                SetCarLook(go, new Color(0x07 / 255f, 0x07 / 255f, 0x0a / 255f), 0f, new Vector3(1, 1, 0));
                 var rec = new ParkedCar { type = "hero", name = "parked_hero", go = go };
                 AddCarCollider(rec);
                 _parked.Add(rec);
@@ -539,10 +571,7 @@ namespace NeonKaido
             c.go.transform.position = new Vector3(p.x, p.y, -p.z);
             float yawU = Mathf.Atan2(c.lane.dir.x, -c.lane.dir.z);
             c.go.transform.rotation = Quaternion.Euler(0, yawU * Mathf.Rad2Deg, 0);
-            c.mpb.SetColor("_PaintColor", c.paint);
-            c.mpb.SetFloat("_Spin", c.spin);
-            c.mpb.SetVector("_LightLv", new Vector3(1, 1, c.brake));
-            c.go.GetComponent<MeshRenderer>().SetPropertyBlock(c.mpb);
+            PushCarLook(c, new Vector3(1f, 1f, c.brake));
         }
 
         // ---------------------------------------------------------------- sky AVs
@@ -616,10 +645,7 @@ namespace NeonKaido
             }
             c.go.transform.position = pos;
             c.go.transform.rotation = Quaternion.Euler(pitch * Mathf.Rad2Deg, yawU * Mathf.Rad2Deg, roll * Mathf.Rad2Deg);
-            c.mpb.SetColor("_PaintColor", c.paint);
-            c.mpb.SetFloat("_Spin", c.spin);
-            c.mpb.SetVector("_LightLv", new Vector3(1, 1, 0));
-            c.go.GetComponent<MeshRenderer>().SetPropertyBlock(c.mpb);
+            PushCarLook(c, new Vector3(1f, 1f, 0f));
         }
 
         // ---------------------------------------------------------------- per-frame
@@ -838,9 +864,10 @@ namespace NeonKaido
             }
             foreach (var c in _sky) PlaceSkyCar(c, t);
             UpdateProxies(playerPos);
-            PushCarLights(Camera.main);
-            DrawBeams(Camera.main);
-            DrawPools(Camera.main);
+            var camPos = Camera.main != null ? Camera.main.transform.position : playerPos;
+            PushCarLights(camPos);
+            DrawBeams(camPos);
+            DrawPools(camPos);
             DrawNavLights();
         }
 
@@ -951,12 +978,12 @@ namespace NeonKaido
         static readonly Vector4 TAIL_COL = new Vector4(1f, 0.0031f, 0.0005f, 1f);
         static readonly Vector4 HEAD_COL = new Vector4(1f, 0.766f, 0.535f, 1f);
 
-        static void PushCarLights(Camera cam)
+        static void PushCarLights(Vector3 camPos)
         {
-            if (cam == null) return;
-            var camPos = cam.transform.position;
             int slot = 0, tailN = 0, headN = 0;
-            foreach (var c in _cars)
+            var live = ActiveCars;
+            if (live == null) { Shader.SetGlobalFloat("_CarLCount", 0f); return; }
+            foreach (var c in live)
             {
                 if (c.go == null) continue;
                 var tr = c.go.transform;
@@ -1043,6 +1070,71 @@ namespace NeonKaido
             Shader.SetGlobalVectorArray("_CarLColor", _carLColor);
         }
 
+        // ---------------------------------------------------------------- edit-mode preview
+        // Everything a moving car contributes is derived per frame from the live traffic list:
+        // the lamp point lights, the beam cones, the headlight pools on the road. The Editor
+        // never calls Update, so opening Main.unity showed the city with no car lighting at all
+        // (and, before CarVisual, black bodies with dead lamps) — while Play looked correct.
+        // NkEditorLighting rebuilds the same state from the serialized CarVisual components so a
+        // static scene shows the same cars Play does.
+        static List<Car> _preview;
+
+        /// Live traffic in Play; the saved scene's traffic in the Editor. The statics survive a
+        /// scene load, so `_cars` can still list cars whose GameObjects are gone (the same check
+        /// VehicleTraffic.Update makes before re-linking); treat that as "no live traffic".
+        static List<Car> ActiveCars =>
+            _cars != null && _cars.Count > 0 && _cars[0].go != null ? _cars : _preview;
+
+        /// Rebuild the per-car look, lamp lights, beams and pools for a static (edit-mode) scene.
+        public static void PreviewVisuals(Vector3 camPos)
+        {
+            var comps = Object.FindObjectsByType<CarVisual>(FindObjectsInactive.Exclude);
+            if (comps.Length == 0) return;          // scene predates CarVisual: nothing to restore
+            if (_models == null && LoadModels() != null) return;
+            if (_preview == null) _preview = new List<Car>(comps.Length);
+            else _preview.Clear();
+            foreach (var cv in comps)
+            {
+                cv.Apply();
+                // Only ground traffic throws beams and pools. Parked rows sit dark (JS parks
+                // them with light.set(0,0,0)) and the hero gets its own slot inside
+                // PushCarLights; sky AVs only carry the nav lights, which stay Play-only.
+                var parent = cv.transform.parent;
+                if (parent == null || parent.name != "traffic") continue;
+                if (cv.type == null || !_models.ContainsKey(cv.type)) continue;
+                _preview.Add(new Car
+                {
+                    go = cv.gameObject, type = cv.type, len = cv.length,
+                    paint = cv.paint, spin = cv.spin, brake = cv.lightLv.z,
+                    pos = cv.transform.position,
+                });
+            }
+            PushCarLights(camPos);
+            DrawBeams(camPos);
+            DrawPools(camPos);
+        }
+
+        /// Beam/pool rig parent. Editor-visible but never saved with the scene: it holds a
+        /// DontSave material, so a copy baked into Main.unity would come back with no material.
+        /// The stale rig is deleted first so a domain reload cannot leave two of them rendering.
+        static Transform CreateRigRoot(string name)
+        {
+            if (_rootT == null)
+            {
+                var v = GameObject.Find("Vehicles");
+                if (v != null) _rootT = v.transform;
+            }
+            if (_rootT != null)
+            {
+                var prev = _rootT.Find(name);
+                if (prev != null) Object.DestroyImmediate(prev.gameObject);
+            }
+            var parent = new GameObject(name);
+            parent.hideFlags = HideFlags.HideAndDontSave;
+            if (_rootT != null) parent.transform.SetParent(_rootT, false);
+            return parent.transform;
+        }
+
         // ---------------------------------------------------------------- headlight beams
         // Port of lights.js `beams`: two merged open cones (apex at the lamps, opening
         // forward, ~3.4 deg down), drawn per lit moving car through an additive shader.
@@ -1103,12 +1195,12 @@ namespace NeonKaido
             _beamPool = new List<GameObject>(cap);
             _beamRenderers = new List<MeshRenderer>(cap);
             _beamBlocks = new List<MaterialPropertyBlock>(cap);
-            var parent = new GameObject("car_beams").transform;
-            if (_rootT != null) parent.SetParent(_rootT, false);
+            var parent = CreateRigRoot("car_beams");
             for (int i = 0; i < cap; i++)
             {
                 var go = new GameObject("beam_" + i);
                 go.transform.SetParent(parent, false);
+                go.hideFlags = HideFlags.HideAndDontSave;
                 go.AddComponent<MeshFilter>().sharedMesh = _beamMesh;
                 var r = go.AddComponent<MeshRenderer>();
                 r.sharedMaterial = _beamMat;
@@ -1154,12 +1246,12 @@ namespace NeonKaido
             _poolPool = new List<GameObject>(cap);
             _poolRenderers = new List<MeshRenderer>(cap);
             _poolBlocks = new List<MaterialPropertyBlock>(cap);
-            var parent = new GameObject("car_pools").transform;
-            if (_rootT != null) parent.SetParent(_rootT, false);
+            var parent = CreateRigRoot("car_pools");
             for (int i = 0; i < cap; i++)
             {
                 var go = new GameObject("pool_" + i);
                 go.transform.SetParent(parent, false);
+                go.hideFlags = HideFlags.HideAndDontSave;
                 go.AddComponent<MeshFilter>().sharedMesh = _poolMesh;
                 var r = go.AddComponent<MeshRenderer>();
                 r.sharedMaterial = _poolMat;
@@ -1172,20 +1264,24 @@ namespace NeonKaido
             }
         }
 
-        static void DrawPools(Camera cam)
+        static void DrawPools(Vector3 camPos)
         {
-            if (cam == null) return;
+            var live = ActiveCars;
+            if (live == null) return;
+            // Leaving Play mode destroys the DontSave material/mesh while _poolInit survives
+            // (domain reload is disabled), so the init flag has to be dropped with them or the
+            // rig never comes back in the Editor.
+            if (_poolMat == null || _poolMesh == null) _poolInit = false;
             EnsurePoolAssets();
-            if (_poolMat == null || _poolMesh == null || _cars == null) return;
+            if (_poolMat == null || _poolMesh == null) return;
             if (_poolPool == null || _poolPool.Count == 0 || _poolPool[0] == null)
             {
                 _poolInit = false;
                 EnsurePoolAssets();
                 if (_poolPool == null || _poolPool.Count == 0) return;
             }
-            var camPos = cam.transform.position;
             int used = 0;
-            foreach (var c in _cars)
+            foreach (var c in live)
             {
                 if (c.go == null) continue;
                 var tr = c.go.transform;
@@ -1225,11 +1321,15 @@ namespace NeonKaido
                 if (_poolPool[i].activeSelf) _poolPool[i].SetActive(false);
         }
 
-        static void DrawBeams(Camera cam)
+        static void DrawBeams(Vector3 camPos)
         {
-            if (cam == null) return;
+            var live = ActiveCars;
+            if (live == null) return;
+            // Same as DrawPools: the DontSave material dies on a Play-mode exit but _beamInit
+            // (a static, no domain reload) does not, which would leave the Editor with no cones.
+            if (_beamMat == null || _beamMesh == null) _beamInit = false;
             EnsureBeamAssets();
-            if (_beamMat == null || _beamMesh == null || _cars == null) return;
+            if (_beamMat == null || _beamMesh == null) return;
             if (_beamPool == null || _beamPool.Count == 0 || _beamPool[0] == null)
             {
                 // Vehicles root was rebuilt (domain reload / scene reload) -> re-pool
@@ -1237,9 +1337,8 @@ namespace NeonKaido
                 EnsureBeamAssets();
                 if (_beamPool == null || _beamPool.Count == 0) return;
             }
-            var camPos = cam.transform.position;
             int used = 0;
-            foreach (var c in _cars)
+            foreach (var c in live)
             {
                 if (c.go == null) continue;
                 var mf = _models[c.type].mf;

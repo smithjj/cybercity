@@ -142,6 +142,14 @@ Two mitigations, both in the editor assembly:
 - **`NkLightArrayGuard`** is an `AssetPostprocessor`: any asset import reimports the dirty `.mat`
   assets and wipes every runtime-set property, so it re-pushes after imports.
 
+The same class of loss applies **per object**: a `MaterialPropertyBlock` is runtime state, not scene
+data. Cars keep paint, wheel spin and lamp level in one, so a loaded scene showed every car black
+with dead head/tail lamps — the car *lighting* (fake point lights, beam cones, headlight pools) is
+also rebuilt per frame by `VehicleTraffic.Update`, which the Editor never calls. `CarVisual`
+serializes the three values and `VehicleTraffic.PreviewVisuals` rebuilds the rest from them;
+`NkEditorLighting` calls it on push and after ~25 m of camera travel. Any future per-object look
+should go through a serialized component for the same reason.
+
 **Consequence for captures.** Never use `capture_game_view --save_path`. It forces the PNG into
 `Assets/Temp/`, which triggers exactly that import, wipes the light arrays mid-session and races the
 guard. `tools/nkcap.sh` takes the command's inline base64 instead and never touches the asset
@@ -225,6 +233,8 @@ session. It takes **Unity** coordinates — sim `(x, y, z)` maps to Unity `(x, y
 | After a scene reload the city looks washed lavender or black | `_AgxExposure` was never published by `Atmo.PushGlobals` (it used to be build-only); it must read 0.82 |
 | Steam/fog renders as hard-edged translucent rectangles | the weather puff atlas is a runtime texture lost on scene load, so the shader samples white alpha (see PORTING.md) |
 | A side street is lit by other neighbourhoods' lights but has none of its own | the 384-light pool is distance-ranked now; it must be re-pushed after camera moves (Play, Editor tick) |
+| Cars are black with dead head/tail lamps in the Editor but fine in Play | paint/spin/lamp level live in a `MaterialPropertyBlock` (not serialized) and `VehicleTraffic.Update` never runs outside Play; see `CarVisual` + `PreviewVisuals` |
+| Car beams/pools disappear after leaving Play mode | their `DontSave` material is destroyed with Play while the static `_beamInit`/`_poolInit` survive (no domain reload); reset the flag when the material is null |
 | `unity.exe: not found` from a tool | that tool hardcodes `C:/...`; run it from Windows, or use an `nk*` one |
 
 ---

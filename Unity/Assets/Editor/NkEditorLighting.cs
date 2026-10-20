@@ -40,6 +40,9 @@ namespace NeonKaido.EditorTools
             EditorSceneManager.sceneOpened += (s, m) => MarkDirty();
             EditorSceneManager.sceneSaved += s => MarkDirty();
             EditorSceneManager.activeSceneChangedInEditMode += (a, b) => MarkDirty();
+            // Leaving Play leaves the scene in the state the last frame pushed it to (cars
+            // mid-lane, brake lamps on); re-push to get back the static preview.
+            EditorApplication.playModeStateChanged += s => MarkDirty();
         }
 
         static void MarkDirty() => _dirty = true;
@@ -69,6 +72,10 @@ namespace NeonKaido.EditorTools
                 {
                     _lightCamValid = true; _lastLightCam = p;
                     BuildingsRuntime.PushSceneLights(p);
+                    // Car lamp lights, beam cones and headlight pools are per-frame output of
+                    // Vehicles.Update, which the Editor never runs; rebuild them for the new
+                    // neighbourhood or the previous view's cars keep lighting this one.
+                    VehicleTraffic.PreviewVisuals(p);
                 }
             }
             if (!_dirty) return;
@@ -92,6 +99,10 @@ namespace NeonKaido.EditorTools
                 // uniforms are also non-serialized; without this the steam quads lose their alpha
                 // mask after a scene load and cover the alley as hard-edged lavender rectangles.
                 WeatherDriver.PushEditorGlobals();
+                // Cars: paint, lamps, beam cones and headlight pools all live outside the scene
+                // (property blocks + per-frame VehicleTraffic.Update), so a freshly opened scene
+                // renders black cars with dead lamps until Play. Restore them from CarVisual.
+                VehicleTraffic.PreviewVisuals(Camera.main != null ? Camera.main.transform.position : Vector3.zero);
             }
             BuildingsRuntime.PushSceneLights();
         }
