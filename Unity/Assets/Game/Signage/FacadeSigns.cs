@@ -11,6 +11,9 @@ namespace NeonKaido
     public class SDesign
     {
         public float[] UV; public float Aspect; public float NatW, NatH; public int Mode;
+        /// The Japanese text drawn in the cell (empty for art cells); feature.js picks hero
+        /// signs by text (`byText`), so the table carries it as a 12th column.
+        public string Text;
     }
 
     public static class SignLib
@@ -27,6 +30,14 @@ namespace NeonKaido
             for (int i = 0; i < LanternTexts.Length; i++)
                 if (LanternTexts[i] == t && i < Lantern.Count) return Lantern[i];
             return Lantern.Count > 7 ? Lantern[7] : null; // fallback 祭
+        }
+
+        /// featured.js `byText(list, t)`: the design whose art is that text, else the first.
+        public static SDesign ByText(List<SDesign> arr, string t)
+        {
+            if (arr == null || arr.Count == 0) return null;
+            foreach (var d in arr) if (d.Text == t) return d;
+            return arr[0];
         }
 
         static List<SDesign> Cat(string name) => name switch
@@ -53,6 +64,7 @@ namespace NeonKaido
                     NatW = float.Parse(p[6], CultureInfo.InvariantCulture),
                     NatH = float.Parse(p[7], CultureInfo.InvariantCulture),
                     Mode = int.Parse(p[8]),
+                    Text = p.Length > 11 ? p[11] : null,
                 };
                 if (p[0].StartsWith("misc_")) Misc[p[0].Substring(5)] = d;
                 else Cat(p[0])?.Add(d);
@@ -60,8 +72,19 @@ namespace NeonKaido
         }
     }
 
+    /// One featured lantern row (a pair of chōchin at a shop entrance). featured.js picks these
+    /// on the shared signage rnd stream, between the goodgames signs and the izakaya, so the
+    /// port has to draw them in the same order or the whole stream (and the row placement) drifts.
+    public class FeaturedRow
+    {
+        public Vector3 P0, P1; public string[] Texts;
+    }
+
     public static class FacadeSigns
     {
+        /// Alley entrance rows produced by the featured pass, consumed by Lanterns.Build.
+        public static readonly List<FeaturedRow> FeaturedAlleyRows = new List<FeaturedRow>();
+
         static readonly Vector3 UP = new Vector3(0, 1, 0);
         static Vector3 Mir(Vector3 v) => new Vector3(v.x, v.y, -v.z);
 
@@ -216,7 +239,8 @@ namespace NeonKaido
         // ---- sign types ----
         static (Vector3 c, float D, float Hh) Blade(SFacade f, float a, float y0, SDesign design, bool isTall = false,
             float? depth = null, float maxH = 9, float? thick = null, bool? edge = null, float lightMul = 1, float importance = 1,
-            Color? tintO = null, float? ftypeO = null, float? intenO = null, (Color, Vector2)? housing = null, float? gapO = null)
+            Color? tintO = null, float? ftypeO = null, float? intenO = null, (Color, Vector2)? housing = null, float? gapO = null,
+            Color? lightColorO = null)
         {
             Vector3 n = f.NS(), r = f.RS();
             bool isNeon = design.Mode == 0;
@@ -263,7 +287,7 @@ namespace NeonKaido
             if (Hh > 3) { Vector3 mid = baseP; Bar(mid, mid + n * (gap + 0.02f), 0.025f, Steel.col, Steel.mr); }
             Vector3 lp = c + n * 0.2f;
             lp.y = Mathf.Max(y0 + Hh * 0.35f, y0 + 0.5f);
-            Color lc = isNeon ? tint : new Color(1, 0.85f, 0.7f);
+            Color lc = lightColorO ?? (isNeon ? tint : new Color(1, 0.85f, 0.7f));
             Light(lp, lc, (isNeon ? 9 : 7) * Mathf.Sqrt(D * Hh) * lightMul, Mathf.Min(20, 9 + Hh * 1.3f), seed, ft, importance);
             _signs++;
             return (c, D, Hh);
@@ -377,12 +401,201 @@ namespace NeonKaido
             _signs++;
         }
 
+        // ---- featured hero signage (featured.js) ----
+        // The reference panels depend on a handful of hand-placed signs: ramen shop, karaoke,
+        // the overlook NEON, the alley set (飲み屋 light box / やきとり blade / GOOD GAMES wall
+        // text / 飲み屋 blade) and the avenue izakaya. JS builds these FIRST, on the same rnd
+        // stream, and then populates only the facades they did not reserve — so leaving them out
+        // both stripped the alley of its hero signs and shifted every populate-generated sign
+        // away from the reference. Placement is in sim space; the mesh helpers mirror.
+
+        static Vector3 SimFromUnity(Vector3 v) => new Vector3(v.x, v.y, -v.z);
+
+        static SFacade MakeFacade(Vector3 center, Vector3 normal, float w, float h, string district = "avenue")
+        {
+            var n = normal.normalized;
+            return new SFacade
+            {
+                Center = SimFromUnity(center), Normal = SimFromUnity(n), Right = SimFromUnity(Vector3.Cross(UP, n).normalized),
+                Width = w, Height = h, Floors = (int)(h / 3.4f), FloorHeight = 3.4, District = district,
+                Shopfront = true, Detail = "hi", TotalHeight = h,
+            };
+        }
+
+        static SFacade NearestFacade(List<SFacade> fs, Vector3 p, Vector3 n, float minDot, System.Func<SFacade, bool> filter = null)
+        {
+            SFacade best = null; float bd = float.MaxValue;
+            foreach (var f in fs)
+            {
+                if (Vector3.Dot(f.NS(), n) < minDot) continue;
+                if (filter != null && !filter(f)) continue;
+                var c = f.CS();
+                float d = new Vector3(c.x - p.x, 0, c.z - p.z).magnitude;
+                if (d < bd) { bd = d; best = f; }
+            }
+            return best;
+        }
+
+        static float AlongTo(SFacade f, Vector3 p) => Vector3.Dot(p - f.CS(), f.RS());
+
+        // same stair profile as Lanterns.AlleyGroundY (facades.js alleyGroundY)
+        static float AlleyGroundY(float x)
+        {
+            const float xs = -40, xe = -62, rise = 7;
+            if (x > xs) return 0;
+            if (x < xe) return rise;
+            return rise * (xs - x) / (xs - xe);
+        }
+
+        static HashSet<SFacade> Featured()
+        {
+            var reserved = new HashSet<SFacade>();
+            var facades = FacadeAPI.Collect();
+            if (facades.Count == 0) return reserved;
+
+            // ---------- 1. Ramen shop: west avenue facade near the street camera ----------
+            var ramenF = NearestFacade(facades, new Vector3(-10, 0, 19), new Vector3(1, 0, 0), 0.8f, f => f.District == "avenue");
+            if (ramenF != null)
+            {
+                reserved.Add(ramenF);
+                float baseY = ramenF.CS().y - (float)ramenF.Height / 2;
+                float halfW = (float)ramenF.Width / 2;
+                float aa = Mathf.Clamp(AlongTo(ramenF, new Vector3(-10, 0, 19)), -halfW + 2f, halfW - 2f);
+                float aN = Mathf.Clamp(AlongTo(ramenF, new Vector3(-10, 0, 16.5f)), -halfW + 0.3f, halfW - 0.3f);
+                if (SignLib.BoxSq.Count > 0)
+                    Blade(ramenF, aN, (ramenF.FasciaY > 0 ? (float)ramenF.FasciaY : baseY + 3.2f) + 0.5f, SignLib.BoxSq[0],
+                        depth: 2.3f, thick: 0.4f, gapO: 0.15f, maxH: 2.4f, intenO: 2.3f,
+                        housing: (new Color(0.55f, 0.55f, 0.57f), new Vector2(0.7f, 0.35f)),
+                        edge: true, lightColorO: new Color(1f, 0.55f, 0.45f), lightMul: 1.4f, importance: 3);
+                var ramenBox = SignLib.ByText(SignLib.BoxV, "ラーメン");
+                if (ramenBox != null)
+                    Blade(ramenF, aa - 2.6f, baseY + 3.9f, ramenBox, depth: 1.1f, maxH: 5.5f,
+                        housing: (new Color(0.45f, 0.03f, 0.03f), new Vector2(0.2f, 0.4f)), edge: true, importance: 3);
+                var izakayaNeon = SignLib.ByText(SignLib.NeonV, "居酒屋");
+                if (izakayaNeon != null)
+                    Blade(ramenF, aa + 3.4f, baseY + 7.5f, izakayaNeon, depth: 1.0f, maxH: 6f,
+                        tintO: NEON["amber"], ftypeO: 0f, importance: 2);
+                var ramenH = SignLib.ByText(SignLib.BoxH, "ラーメン 一番");
+                if (ramenH != null)
+                    Flat(ramenF, aa, baseY + 3.25f, ramenH, width: 5.2f, maxH: 0.9f, depth: 0.25f, intenO: 2.0f, importance: 2);
+            }
+
+            // ---------- 2. Karaoke: big magenta neon blade on the east side ----------
+            var karF = NearestFacade(facades, new Vector3(10, 0, 4), new Vector3(-1, 0, 0), 0.8f, f => f.District == "avenue");
+            if (karF != null)
+            {
+                reserved.Add(karF);
+                float baseY = karF.CS().y - (float)karF.Height / 2;
+                float halfW = (float)karF.Width / 2;
+                float a = Mathf.Clamp(AlongTo(karF, new Vector3(10, 0, 6)), -halfW + 1f, halfW - 1f);
+                var karaV = SignLib.ByText(SignLib.NeonV, "カラオケ");
+                if (karaV != null)
+                    Blade(karF, a, baseY + 4.5f, karaV, depth: 1.5f, maxH: 8f, tintO: NEON["magenta"], ftypeO: 0f,
+                        intenO: 7.5f, edge: true, importance: 3, lightMul: 1.5f);
+                var pachi = SignLib.ByText(SignLib.BoxV, "パチンコ");
+                if (pachi != null) Blade(karF, a - 4.2f, baseY + 4.2f, pachi, depth: 1.0f, maxH: 5f, importance: 2);
+                var karaH = SignLib.ByText(SignLib.BoxH, "カラオケ");
+                if (karaH != null) Flat(karF, a - 1.5f, baseY + 3.5f, karaH, width: 5f, maxH: 1f, importance: 2);
+                if (SignLib.Misc.TryGetValue("sign24", out var s24) && s24 != null)
+                    Flat(karF, a + 2.5f, baseY + 2.4f, s24, width: 0.8f, depth: 0.15f, intenO: 2.2f);
+            }
+
+            // ---------- 3. Overlook: blue ネオン blade on a free-standing mast ----------
+            {
+                float ox = (float)Layout.OverlookPosition[0], oy = (float)Layout.OverlookPosition[1], oz = (float)Layout.OverlookPosition[2];
+                var f = MakeFacade(new Vector3(ox + 8.2f, oy, oz - 5.5f), new Vector3(-1f, 0f, 0.25f), 2f, 20f);
+                var ds = SignLib.Misc.TryGetValue("neonOverlook", out var no) && no != null ? no : SignLib.ByText(SignLib.NeonV, "ネオン");
+                if (ds != null)
+                    Blade(f, 0f, oy - 2.4f, ds, depth: 1.35f, maxH: 7.8f, tintO: NEON["blue"], intenO: 8f, ftypeO: 0f,
+                        edge: true, gapO: 0.3f, importance: 4);
+                var fc = f.CS();
+                Bar(new Vector3(fc.x, oy - 12f, fc.z), new Vector3(fc.x, oy + 5f, fc.z), 0.12f,
+                    new Color(0.1f, 0.1f, 0.11f), new Vector2(0.8f, 0.5f));
+            }
+
+            // ---------- 4. Alley set dressing (ref panel 4) ----------
+            _lightScale = 0.6f;
+            float alZ = (float)Layout.AlleyZ, alW = (float)Layout.AlleyWidth;
+            var alleyF = facades.FindAll(f => f.District == "alley");
+            var nomF = NearestFacade(alleyF, new Vector3(-36, 0, alZ - alW / 2), new Vector3(0, 0, 1), 0.8f);
+            if (nomF != null && SignLib.Misc.TryGetValue("nomiya", out var nomiya) && nomiya != null)
+            {
+                reserved.Add(nomF);
+                float baseY = nomF.CS().y - (float)nomF.Height / 2;
+                float a = AlongTo(nomF, new Vector3(-36, 0, 0));
+                Flat(nomF, a, baseY + 3.1f, nomiya, width: 2.2f, depth: 0.3f, intenO: 2.2f,
+                    housing: (new Color(0.08f, 0.05f, 0.03f), new Vector2(0.1f, 0.6f)),
+                    lightColor: new Color(1f, 0.75f, 0.5f), importance: 3);
+                var yaki = SignLib.ByText(SignLib.NeonV, "やきとり");
+                if (yaki != null)
+                    Blade(nomF, a + 2.1f, baseY + 3.4f, yaki, depth: 0.7f, maxH: 3.2f, tintO: NEON["red"], importance: 2);
+            }
+            var ggF = NearestFacade(alleyF, new Vector3(-46, 0, alZ + alW / 2), new Vector3(0, 0, -1), 0.8f);
+            if (ggF != null && SignLib.Misc.TryGetValue("goodgames", out var goodgames) && goodgames != null)
+            {
+                reserved.Add(ggF);
+                float baseY = ggF.CS().y - (float)ggF.Height / 2;
+                float a = AlongTo(ggF, new Vector3(-46, 0, 0));
+                float yy = AlleyGroundY(-46f) + 3.4f;
+                Flat(ggF, a, Mathf.Max(baseY + 2.8f, yy), goodgames, width: 3.2f, depth: 0.003f, off: 0.01f,
+                    noHousing: true, intenO: 0.35f, tintO: Color.white, lightOn: false);
+                var gl = ggF.CS() + ggF.RS() * a + ggF.NS() * 1.2f;
+                gl.y = Mathf.Max(baseY + 4.5f, yy + 1.2f);
+                Light(gl, new Color(1f, 0.9f, 0.8f), 6f, 7f, 1, 0f, 1f);
+                var nomiyaB = SignLib.ByText(SignLib.BoxV, "飲み屋");
+                if (nomiyaB != null)
+                    Blade(ggF, a - 2.6f, Mathf.Max(baseY + 3.2f, yy - 0.5f), nomiyaB, depth: 0.7f, maxH: 3.5f, importance: 2);
+            }
+            // Lantern strings across the alley are deterministic; the entrance rows are picked
+            // from the SHARED signage stream here (featured.js does it between the goodgames
+            // signs and the izakaya), so Lanterns must not roll its own dice: that is why the
+            // port hung rows on a different set of facades than the reference.
+            FeaturedAlleyRows.Clear();
+            foreach (var f in alleyF)
+            {
+                if ((float)_rnd.Next() < 0.5f)
+                {
+                    float baseY = f.CS().y - (float)f.Height / 2;
+                    float a = (float)Range(-(float)f.Width / 3, (float)f.Width / 3);
+                    var p0 = f.CS() + f.RS() * (a - 0.6f) + f.NS() * 0.45f; p0.y = baseY + 2.5f;
+                    var p1 = f.CS() + f.RS() * (a + 0.6f) + f.NS() * 0.45f; p1.y = baseY + 2.5f;
+                    FeaturedAlleyRows.Add(new FeaturedRow
+                    {
+                        P0 = p0, P1 = p1,
+                        Texts = (float)_rnd.Next() < 0.5f ? new[] { "居", "酒" } : new[] { "焼鳥", "酒" },
+                    });
+                }
+            }
+            _lightScale = 1f;
+
+            // ---------- 5. Izakaya on the avenue east side ----------
+            var izF = NearestFacade(facades, new Vector3(10, 0, -30), new Vector3(-1, 0, 0), 0.8f,
+                f => f.District == "avenue" && !reserved.Contains(f));
+            if (izF != null)
+            {
+                reserved.Add(izF);
+                float baseY = izF.CS().y - (float)izF.Height / 2;
+                float halfW = (float)izF.Width / 2;
+                var izH = SignLib.ByText(SignLib.NeonH, "IZAKAYA");
+                if (izH != null)
+                    Flat(izF, 0f, baseY + 3.6f, izH, width: 4.2f, maxH: 1f, depth: 0.12f, tintO: NEON["amber"], importance: 2);
+                var izV = SignLib.ByText(SignLib.NeonV, "居酒屋");
+                if (izV != null)
+                    Blade(izF, -halfW + 1.2f, baseY + 4.5f, izV, depth: 1.2f, maxH: 6f, tintO: NEON["red"], importance: 2);
+                var hotel = SignLib.ByText(SignLib.NeonV, "ホテル");
+                if (hotel != null)
+                    Blade(izF, halfW - 1.2f, baseY + 5f, hotel, depth: 1.2f, maxH: 7f, tintO: NEON["violet"], importance: 2);
+            }
+            return reserved;
+        }
+
         // ---- populate (populate.js) ----
-        public static int Populate()
+        public static int Populate(HashSet<SFacade> reserved = null)
         {
             int used = 0;
             foreach (var f in FacadeAPI.Collect())
             {
+                if (reserved != null && reserved.Contains(f)) continue;   // featured hero sign owns it
                 float baseY = f.CS().y - (float)f.Height / 2;
                 float top = f.CS().y + (float)f.Height / 2;
                 float w = (float)f.Width;
@@ -544,7 +757,7 @@ namespace NeonKaido
             _pool = new List<PoolL>();
             FlickerL.Clear(); FlickerSeed.Clear(); FlickerType.Clear(); FlickerBase.Clear();
 
-            int used = Populate();
+            int used = Populate(Featured());
 
             // lanterns (rows/strings/tall/andon) — append lights to _pool before the budget
             string lan = Lanterns.Build(root);

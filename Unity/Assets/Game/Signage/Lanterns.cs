@@ -1,4 +1,4 @@
-// Port of signage/lanterns.js + the lantern data of signage/featured.js.
+﻿// Port of signage/lanterns.js + the lantern data of signage/featured.js.
 // Chōchin paper lanterns under awnings and across the alley, tall やきとり lanterns,
 // andon floor lanterns on the river promenade. All placement math in SIM space
 // (mirrored at mesh build); one mesh per batch (paper/caps/wires/andon/andonFrame),
@@ -103,16 +103,17 @@ namespace NeonKaido
             SFacade best = null; float bd = float.MaxValue;
             foreach (var f in fs)
             {
-                if (Vector3.Dot(f.Normal, n) < minDot) continue;
+                if (Vector3.Dot(f.NS(), n) < minDot) continue;
                 if (reserved != null && reserved.Contains(f)) continue;
-                var dc = new Vector3(f.Center.x - p.x, 0, f.Center.z - p.z);
+                var fc = f.CS();
+                var dc = new Vector3(fc.x - p.x, 0, fc.z - p.z);
                 float d = dc.magnitude;
                 if (d < bd) { bd = d; best = f; }
             }
             return best;
         }
 
-        static float AlongTo(SFacade f, Vector3 p) => Vector3.Dot(p - f.Center, f.Right);
+        static float AlongTo(SFacade f, Vector3 p) => Vector3.Dot(p - f.CS(), f.RS());
 
         // JS alleyGroundY(lay, x): stairs from xStart=-40 (y0) down to xEnd=-62 (y=rise 7)
         static float AlleyGroundY(float x)
@@ -258,11 +259,11 @@ namespace NeonKaido
             if (ramenF != null && ramenF.District == "avenue")
             {
                 reserved.Add(ramenF);
-                float baseY = ramenF.Center.y - (float)ramenF.Height / 2;
+                float baseY = ramenF.CS().y - (float)ramenF.Height / 2;
                 float a = AlongTo(ramenF, new Vector3(-10, 0, 19));
                 float aa = Mathf.Clamp(a, -(float)ramenF.Width / 2 + 2, (float)ramenF.Width / 2 - 2);
-                var p0 = ramenF.Center + ramenF.Right * (aa - 2.2f) + ramenF.Normal * 0.7f; p0.y = baseY + 2.95f;
-                var p1 = ramenF.Center + ramenF.Right * (aa + 2.6f) + ramenF.Normal * 0.7f; p1.y = baseY + 2.95f;
+                var p0 = ramenF.CS() + ramenF.RS() * (aa - 2.2f) + ramenF.NS() * 0.7f; p0.y = baseY + 2.95f;
+                var p1 = ramenF.CS() + ramenF.RS() * (aa + 2.6f) + ramenF.NS() * 0.7f; p1.y = baseY + 2.95f;
                 rows.Add(new Row { p0 = p0, p1 = p1, count = 6, texts = new[] { "ら", "ー", "め", "ん", "ら", "ー" }, scale = 1.0f });
             }
             // karaoke facade (excluded from the izakaya pick; hero signs come later)
@@ -276,9 +277,9 @@ namespace NeonKaido
             if (nomF != null)
             {
                 reserved.Add(nomF);
-                float baseY = nomF.Center.y - (float)nomF.Height / 2;
+                float baseY = nomF.CS().y - (float)nomF.Height / 2;
                 float a = AlongTo(nomF, new Vector3(-36, 0, 0));
-                var tp = nomF.Center + nomF.Right * (a - 1.7f) + nomF.Normal * 0.5f; tp.y = baseY + 2.6f;
+                var tp = nomF.CS() + nomF.RS() * (a - 1.7f) + nomF.NS() * 0.5f; tp.y = baseY + 2.6f;
                 talls.Add(new Tall { pos = tp, text = "やきとり" });
             }
             for (float x = alXs - 4; x > alXe + 4; x -= 7.5f)
@@ -291,25 +292,19 @@ namespace NeonKaido
                     sag = 0.5f, count = 4
                 });
             }
-            // deviation note: JS consumes the shared SignBuilder rng here; we use the lantern stream (777)
-            foreach (var f in alleyF)
-            {
-                if (Next() < 0.5)
-                {
-                    float baseY = f.Center.y - (float)f.Height / 2;
-                    float a = Range(-(float)f.Width / 3, (float)f.Width / 3);
-                    var p0 = f.Center + f.Right * (a - 0.6f) + f.Normal * 0.45f; p0.y = baseY + 2.5f;
-                    var p1 = f.Center + f.Right * (a + 0.6f) + f.Normal * 0.45f; p1.y = baseY + 2.5f;
-                    rows.Add(new Row { p0 = p0, p1 = p1, count = 2, texts = Next() < 0.5 ? new[] { "居", "酒" } : new[] { "焼鳥", "酒" }, scale = 0.9f });
-                }
-            }
+            // Entrance rows are picked in the featured pass on the shared signage rnd stream
+            // (featured.js), and computed there in sim space. Rolling our own dice here both put
+            // them on different facades and mixed Unity-space facade vectors into sim-space math,
+            // which mirrored every row to z = -100 and left the alley without its lanterns.
+            foreach (var fr in FacadeSigns.FeaturedAlleyRows)
+                rows.Add(new Row { p0 = fr.P0, p1 = fr.P1, count = 2, texts = fr.Texts, scale = 0.9f });
             // izakaya on the avenue east side
             var izF = Nearest(facades, new Vector3(10, 0, -30), new Vector3(-1, 0, 0), 0.8f, reserved);
             if (izF != null && izF.District == "avenue")
             {
-                float baseY = izF.Center.y - (float)izF.Height / 2;
-                var p0 = izF.Center + izF.Right * -2.4f + izF.Normal * 0.6f; p0.y = baseY + 2.9f;
-                var p1 = izF.Center + izF.Right * 2.4f + izF.Normal * 0.6f; p1.y = baseY + 2.9f;
+                float baseY = izF.CS().y - (float)izF.Height / 2;
+                var p0 = izF.CS() + izF.RS() * -2.4f + izF.NS() * 0.6f; p0.y = baseY + 2.9f;
+                var p1 = izF.CS() + izF.RS() * 2.4f + izF.NS() * 0.6f; p1.y = baseY + 2.9f;
                 rows.Add(new Row { p0 = p0, p1 = p1, count = 5, texts = new[] { "居", "酒", "屋", "酒", "祭" }, scale = 1.0f });
             }
 

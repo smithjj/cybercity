@@ -235,6 +235,9 @@ session. It takes **Unity** coordinates — sim `(x, y, z)` maps to Unity `(x, y
 | A side street is lit by other neighbourhoods' lights but has none of its own | the 384-light pool is distance-ranked now; it must be re-pushed after camera moves (Play, Editor tick) |
 | Cars are black with dead head/tail lamps in the Editor but fine in Play | paint/spin/lamp level live in a `MaterialPropertyBlock` (not serialized) and `VehicleTraffic.Update` never runs outside Play; see `CarVisual` + `PreviewVisuals` |
 | Car beams/pools disappear after leaving Play mode | their `DontSave` material is destroyed with Play while the static `_beamInit`/`_poolInit` survive (no domain reload); reset the flag when the material is null |
+| Lantern kanji render as hollow boxes | the headless atlas renderer had no mincho font, so `FONTS.mincho` fell back to a non-CJK serif and drew `.notdef`; register a serif CJK face (SimSun here) and alias it to "MS Mincho"/"Yu Mincho", then re-run `tools/render-atlas.mjs` |
+| A hand-placed "hero" sign is missing and every nearby generated sign differs from the reference | the whole `featured.js` pass is missing: it runs *first* on the shared signage rnd stream and reserves its facades, so skipping it shifts every populate draw |
+| Lanterns hang on the wrong side of the map | `Lanterns` mixed Unity-space `f.Center/f.Right/f.Normal` into sim-space math (and `Hang` mirrors again); always use `CS()/RS()/NS()` |
 | `unity.exe: not found` from a tool | that tool hardcodes `C:/...`; run it from Windows, or use an `nk*` one |
 
 ---

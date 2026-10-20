@@ -10,11 +10,27 @@ globalThis.document = {
   createElement: () => { const c = createCanvas(1, 1); return c; },
   fonts: { check: () => true, load: async () => [] },
 };
-try {
-  for (const f of ['meiryo.ttc', 'YuGothM.ttc', 'msgothic.ttc', 'arial.ttf', 'arialbd.ttf', 'consola.ttf'])
-    GlobalFonts.registerFromPath('C:/Windows/Fonts/' + f);
-  console.log('fonts registered');
-} catch (e) { console.log('font reg warn:', e.message); }
+// System fonts. One missing file must not abort the rest of the list: the previous
+// single try/catch meant a single absent font silently dropped every later one.
+//
+// The lantern cells are drawn with FONTS.mincho ("Yu Mincho", "MS Mincho", serif). Neither
+// mincho face is installed here, and @napi-rs/canvas has no per-glyph fallback chain like a
+// browser — so 'serif' resolved to a non-CJK face and every lantern glyph came out as the
+// .notdef box, which is what the port was rendering. SimSun is the only serif CJK face on the
+// machine; register it under both mincho family names so the existing FONTS string matches.
+const FONT_DIR = 'C:/Windows/Fonts/';
+const fonts = [
+  'meiryo.ttc', 'YuGothM.ttc', 'msgothic.ttc', 'arial.ttf', 'arialbd.ttf', 'consola.ttf',
+  'simsun.ttc',
+];
+for (const f of fonts) {
+  try { GlobalFonts.registerFromPath(FONT_DIR + f); console.log('font ok:', f); }
+  catch (e) { console.log('font skip:', f, e.message); }
+}
+for (const alias of ['Yu Mincho', 'MS Mincho']) {
+  try { GlobalFonts.registerFromPath(FONT_DIR + 'simsun.ttc', alias); console.log('font alias:', alias, '-> simsun'); }
+  catch (e) { console.log('font alias fail:', alias, e.message); }
+}
 
 const NAimg = await loadImage('assets/textures/signage/lightbox_atlas.png');
 const CAimg = await loadImage('assets/textures/signage/posters_atlas.png');
