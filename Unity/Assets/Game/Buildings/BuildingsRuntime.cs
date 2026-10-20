@@ -129,7 +129,9 @@ namespace NeonKaido
 
         public static string BuildAll(Dictionary<string, Material> mats = null, Material acMat = null)
         {
-            Shader.SetGlobalFloat("_AgxExposure", 0.82f); // JS PostFX exposure
+            // _AgxExposure is published by Atmo.PushGlobals now (it must survive a scene load,
+            // which never runs a world build); Atmo owns the value.
+            NeonKaido.Atmo.PushGlobals();
             NeonKaido.Atmo.BuildSkyDome();   // camera-tracking sky replaces the JS scene.backgroundNode
             // fresh state each call (DestroyImmediate: eval retries can run this twice in one frame)
             var oldRoot = GameObject.Find("/Buildings");
@@ -331,7 +333,13 @@ namespace NeonKaido
         /// Editor: opening Assets/Main.unity without it shows _BLCount = 0 — a city whose lamps are
         /// visibly lit but cast nothing, because NkBPointLights() breaks out of its loop immediately.
         /// Returns a description for the debug CLI.
-        public static string PushSceneLights()
+        ///
+        /// Ranking is by camera distance, not raw brightness: JS lights.js keeps the nearest
+        /// `importance*intensity/(1+d²*0.004)` lights pooled every 20 frames. A global brightness
+        /// sort instead fills the 384 slots with the avenue's brightest signs and starves any
+        /// side street: from the alley the closest shop lanterns (intensity 2-6, range 6) lost to
+        /// distant 160-intensity billboard casts, so the walls got no local light at all.
+        public static string PushSceneLights(Vector3? camPos = null)
         {
             var lights = new List<Light>();
             foreach (var rn in SceneLightRoots)
@@ -343,14 +351,17 @@ namespace NeonKaido
             int found = lights.Count;
             if (lights.Count > LightArraySize)
             {
-                // Rank by reach*intensity so lamps and signs both survive; the tail is dropped.
-                lights.Sort((a, b) =>
+                var cam = camPos ?? (Camera.main != null ? Camera.main.transform.position : Vector3.zero);
+                var scored = new List<(float s, Light l)>(lights.Count);
+                foreach (var l in lights)
                 {
-                    float ka = (a.color.r + a.color.g + a.color.b) * a.intensity * a.range;
-                    float kb = (b.color.r + b.color.g + b.color.b) * b.intensity * b.range;
-                    return kb.CompareTo(ka);
-                });
-                lights.RemoveRange(LightArraySize, lights.Count - LightArraySize);
+                    float d2 = (l.transform.position - cam).sqrMagnitude;
+                    float lum = l.color.r + l.color.g + l.color.b;
+                    scored.Add((lum * l.intensity * l.range / (1f + d2 * 0.004f), l));
+                }
+                scored.Sort((a, b) => b.s.CompareTo(a.s));
+                lights.Clear();
+                for (int i = 0; i < LightArraySize; i++) lights.Add(scored[i].l);
             }
             var pos = new Vector4[lights.Count];
             var col = new Vector4[lights.Count];

@@ -28,6 +28,10 @@ namespace NeonKaido.EditorTools
 
         static double _next;
         static bool _dirty = true;
+        static bool _camValid;
+        static Vector3 _lastCam;
+        static bool _lightCamValid;
+        static Vector3 _lastLightCam;
 
         static NkEditorLighting()
         {
@@ -47,6 +51,26 @@ namespace NeonKaido.EditorTools
         {
             if (EditorApplication.timeSinceStartup < _next) return;
             _next = EditorApplication.timeSinceStartup + IntervalSeconds;
+            // The weather rig follows the camera in Play via WeatherDriver.Update; in edit mode
+            // the rain volume and the steam billboard basis must be moved by hand or they stay
+            // behind at whatever pose the last push happened to see.
+            if (!EditorApplication.isPlayingOrWillChangePlaymode && Camera.main != null)
+            {
+                var p = Camera.main.transform.position;
+                if (!_camValid || (p - _lastCam).sqrMagnitude > 1e-4f)
+                {
+                    _camValid = true; _lastCam = p;
+                    WeatherDriver.PushEditorCamera(p);
+                }
+                // The 384-light pool is distance-ranked: after moving between views (overlook ->
+                // alley) the old neighbourhood must hand its slots to the new one, or the view is
+                // lit by lights that are no longer in frame. Re-rank after ~25 m of camera travel.
+                if (!_lightCamValid || (p - _lastLightCam).sqrMagnitude > 625f)
+                {
+                    _lightCamValid = true; _lastLightCam = p;
+                    BuildingsRuntime.PushSceneLights(p);
+                }
+            }
             if (!_dirty) return;
             _dirty = false;
             Push();
@@ -64,6 +88,10 @@ namespace NeonKaido.EditorTools
                 // The shaders animate off _SimTime; a fixed value keeps edits from flickering.
                 Shader.SetGlobalFloat("_SimTime", 0f);
                 Atmo.PushGlobals();
+                // Runtime weather textures (puff atlas / heightfield) and the per-frame weather
+                // uniforms are also non-serialized; without this the steam quads lose their alpha
+                // mask after a scene load and cover the alley as hard-edged lavender rectangles.
+                WeatherDriver.PushEditorGlobals();
             }
             BuildingsRuntime.PushSceneLights();
         }

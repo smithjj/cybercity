@@ -189,6 +189,23 @@ namespace NeonKaido
             BuildingsRuntime.PushSceneLights();
         }
 
+        // The 384-light pool is ranked by distance (JS lights.js re-ranks every 20 frames), so
+        // walking away from the avenue must hand the slots to the new neighbourhood's lamps or
+        // the side streets stay pitch black. Re-rank after ~20 m, at most once a second.
+        static float _lightRepushT;
+        static Vector3 _lightRepushPos;
+        void LightRepush(float dt)
+        {
+            _lightRepushT -= dt;
+            if (_lightRepushT > 0f) return;
+            var cam = Camera.main;
+            var p = cam != null ? cam.transform.position : transform.position;
+            if ((p - _lightRepushPos).sqrMagnitude < 400f) return;   // 20 m
+            _lightRepushT = 1f;
+            _lightRepushPos = p;
+            BuildingsRuntime.PushSceneLights(p);
+        }
+
         // Drop the player onto the highest surface under (x,z) (spawn / elevators / respawn).
         public void PlaceAt(float x, float y, float z, float? yaw)
         {
@@ -221,6 +238,7 @@ namespace NeonKaido
             }
             Shader.SetGlobalFloat("_SimTime", t);
             NeonKaido.Atmo.PushGlobals();
+            LightRepush(dt);
 
             if (Input.GetKeyDown(KeyCode.G) && !NeonKaido.CarGallery.Active && !NeonKaido.Delivery.PhoneOpen) NeonKaido.CarGallery.Toggle();
             if (NeonKaido.CarGallery.Active)

@@ -76,6 +76,11 @@ namespace NeonKaido
             Shader.SetGlobalVector("_GroundHaze", GroundHaze);
             Shader.SetGlobalFloat("_SkyBrightness", 1f);
             Shader.SetGlobalFloat("_Rain", _state.rain);
+            // AgX input exposure (JS PostFX params.exposure = 0.82). This was set only inside
+            // BuildingsRuntime.BuildAll, so a scene loaded without a rebuild (or any domain
+            // reload) read 0: AgX(0) lifts a flat grey and every fog/haze surface turns into a
+            // milky lavender veil over a world that looks washed out or black.
+            Shader.SetGlobalFloat("_AgxExposure", 0.82f);
             // Scene fog constants (atmo.js fogNodeFn). These MUST be pushed as globals: no shader
             // declares them in Properties, so the only other writer was GameDebug.ApplyFog, which
             // sets them as *material* floats during an Editor-side world build. Those are not

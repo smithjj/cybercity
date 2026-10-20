@@ -222,6 +222,9 @@ session. It takes **Unity** coordinates — sim `(x, y, z)` maps to Unity `(x, y
 | Trees/rails stretch into long slivers, a dotted grid crawls over the paving | a merged mesh passed 65,535 verts without `indexFormat = UInt32`; UInt16 indices wrap and weld distant triangles (see PORTING.md) |
 | A billboard/screen is a black slab from the front although its texture is bound | the sim→Unity mirror flipped the winding; reverse the triangle order (a Cull Off diagnostic material proves it) |
 | A material value looks right in-session then goes black/zero after `open_scene` | the property is not declared in the shader's `Properties{}`; an HLSL uniform alone is dropped on reload |
+| After a scene reload the city looks washed lavender or black | `_AgxExposure` was never published by `Atmo.PushGlobals` (it used to be build-only); it must read 0.82 |
+| Steam/fog renders as hard-edged translucent rectangles | the weather puff atlas is a runtime texture lost on scene load, so the shader samples white alpha (see PORTING.md) |
+| A side street is lit by other neighbourhoods' lights but has none of its own | the 384-light pool is distance-ranked now; it must be re-pushed after camera moves (Play, Editor tick) |
 | `unity.exe: not found` from a tool | that tool hardcodes `C:/...`; run it from Windows, or use an `nk*` one |
 
 ---

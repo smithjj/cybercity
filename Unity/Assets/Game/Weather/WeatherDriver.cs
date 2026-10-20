@@ -269,8 +269,10 @@ namespace NeonKaido
         }
 
         // ---- puff atlas (port of makePuffAtlas)
+        static Texture2D _puffTex;
         static void MakePuffAtlas()
         {
+            if (_puffTex != null) return;   // runtime texture: rebuild only when a scene load killed it
             const int size = 256, half = 128, N = 64;
             var rng = new Mulberry32(777u);
             var grid = new float[N * N];
@@ -307,6 +309,7 @@ namespace NeonKaido
             tex.wrapMode = TextureWrapMode.Clamp;
             tex.filterMode = FilterMode.Bilinear;
             tex.Apply(true, false);
+            _puffTex = tex;
             Shader.SetGlobalTexture("_WxPuffTex", tex);
         }
 
@@ -403,6 +406,39 @@ namespace NeonKaido
             GatherLights(camPos, t);
             PushGlobals(dt, t, camPos, rain, li, wind);
             DripsUpdate(dt, t, camPos, wind);
+        }
+
+        /// Editor-side equivalent of the Update-driven globals. The puff atlas and the heightfield
+        /// are runtime textures (never serialized) and every weather uniform is only written from
+        /// Update, i.e. Play. After a scene load / editor restart the atlas is gone, so
+        /// _WxPuffTex resolves to Unity's white default and the steam quads lose their soft alpha
+        /// mask: the alley turns into an opaque lavender veil crossed by hard-edged rectangles.
+        /// Rebuild the cheap runtime resources and pin the camera/time so the edit view is the game.
+        public static void PushEditorGlobals()
+        {
+            if (_puffTex == null) MakePuffAtlas();
+            if (_heights == null || _heightTex == null) BakeHeights();
+            if (_emitA.Count == 0) BuildSteamEmitters();
+            var cam = Camera.main;
+            var camPos = cam != null ? cam.transform.position : Vector3.zero;
+            _prevValid = false; _camVel = Vector3.zero;
+            GatherLights(camPos, 0f);
+            PushGlobals(1f / 60f, 0f, camPos, 1f, 0f, new Vector2(0.6f, -0.25f));
+            // Deliberately do NOT set Built: the drip simulation arrays only exist after Build(),
+            // and Play mode keeps statics (DisableDomainReload), so claiming Built here would make
+            // WeatherDriver.Update skip the build and then null-ref in DripsUpdate.
+        }
+
+        /// Cheap per-editor-tick camera update: rain is a camera-centred volume and the steam
+        /// billboards orient to _WxCam, so moving the Scene camera without Play mode must move
+        /// the weather rig too or the puffs/streaks are left behind at the old pose.
+        public static void PushEditorCamera(Vector3 camPos)
+        {
+            Shader.SetGlobalVector("_WxCam", camPos);
+            Shader.SetGlobalVector("_WxCamVel", Vector3.zero);
+            var cam = Camera.main;
+            if (cam != null)
+                Shader.SetGlobalFloat("_WxPixK", 2f * Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad) / Mathf.Max(1, cam.pixelHeight));
         }
 
         static void PushGlobals(float dt, float t, Vector3 camPos, float rain, float lightning, Vector2 wind)
