@@ -121,6 +121,11 @@ Cheap and decisive beats "looks right".
   "looked fine" turned out to be a zero-difference null result until the capture stopped writing into
   `Assets/`.
 - **Reload from disk.** `open_scene`, then re-probe. This is the only proof that a bake persisted.
+- **Probe what the renderer actually draws, not what you think it should.** The crowd looked absent
+  because it was *1.6 cm* tall: `Renderer.bounds` on a skinned mesh reports bind-pose bounds, and this
+  FBX carries a 100x armature scale, so a 1.7 m character reports 197 m and any "normalise to 1.7 m"
+  math shrinks it by 100. Bake the mesh (`SkinnedMeshRenderer.BakeMesh` + the renderer's
+  `localToWorldMatrix`) or measure the skeleton's bone span instead.
 
 Do not verify by looking at the viewport alone until §5 is satisfied.
 
@@ -149,6 +154,16 @@ also rebuilt per frame by `VehicleTraffic.Update`, which the Editor never calls.
 serializes the three values and `VehicleTraffic.PreviewVisuals` rebuilds the rest from them;
 `NkEditorLighting` calls it on push and after ~25 m of camera travel. Any future per-object look
 should go through a serialized component for the same reason.
+
+The crowd loses state the same way, in three separate steps that all look like "the feature was never
+built": runtime `Material`s (and `Object.Instantiate` of one — **instantiate does not copy
+`hideFlags`**) are destroyed by the next scene load while the `HideAndDontSave` hierarchy survives
+holding dead references; and `Shader.Find` can return null while a scene is still loading, which
+bakes a material that renders magenta forever. So: mark every runtime material `DontSave`, route
+creation through one guarded accessor that makes `Build` bail out and retry on the next tick, derive
+"is it built" from the root reference rather than a cached bool, and rebuild on `sceneOpened`.
+Related trap: `FindObjectsByType` does **not** enumerate `HideAndDontSave` objects — a "0 roots"
+probe is a lie, while `GameObject.Find` and the static reference still see them.
 
 **Consequence for captures.** Never use `capture_game_view --save_path`. It forces the PNG into
 `Assets/Temp/`, which triggers exactly that import, wipes the light arrays mid-session and races the

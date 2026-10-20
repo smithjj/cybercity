@@ -144,8 +144,11 @@ namespace NeonKaido
             var B = new BChunkedBuckets(96);
             var outp = new BOut();
             foreach (var l in csLots) BuildArchitecture.BuildLotArchitecture(l, B, outp);
-            NeonKaido.FacadeAPI.CacheFromLots(csLots); // for signage (billboards) facade records
+            // ShopBuilder is what stamps BFront.ShopType, and the facade records copy it into
+            // `Shopfront`. Caching before it ran left every facade with Shopfront = false, which
+            // silently skipped the ground-floor fascia signs and the crowd's shopfront idlers.
             new ShopBuilder(B, outp).BuildAll(csLots);
+            NeonKaido.FacadeAPI.CacheFromLots(csLots); // for signage (billboards) facade records
             Props.BuildProps(B, csLots, outp);
             Alley.BuildAlley(B, outp);
             Overlook.BuildOverlook(B, csLots, outp);

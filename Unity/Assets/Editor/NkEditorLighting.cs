@@ -37,7 +37,7 @@ namespace NeonKaido.EditorTools
         {
             EditorApplication.update += Tick;
             EditorApplication.hierarchyChanged += MarkDirty;
-            EditorSceneManager.sceneOpened += (s, m) => MarkDirty();
+            EditorSceneManager.sceneOpened += (s, m) => { Crowd.ResetPreview(); MarkDirty(); };
             EditorSceneManager.sceneSaved += s => MarkDirty();
             EditorSceneManager.activeSceneChangedInEditMode += (a, b) => MarkDirty();
             // Leaving Play leaves the scene in the state the last frame pushed it to (cars
@@ -76,6 +76,8 @@ namespace NeonKaido.EditorTools
                     // Vehicles.Update, which the Editor never runs; rebuild them for the new
                     // neighbourhood or the previous view's cars keep lighting this one.
                     VehicleTraffic.PreviewVisuals(p);
+                    // Same for the pedestrians: the sim lives in PlayerController.Update.
+                    Crowd.PreviewVisuals(p);
                 }
             }
             if (!_dirty) return;
@@ -103,6 +105,9 @@ namespace NeonKaido.EditorTools
                 // (property blocks + per-frame VehicleTraffic.Update), so a freshly opened scene
                 // renders black cars with dead lamps until Play. Restore them from CarVisual.
                 VehicleTraffic.PreviewVisuals(Camera.main != null ? Camera.main.transform.position : Vector3.zero);
+                // Pedestrians: nothing of the crowd is serialized, so place the skinned pool and
+                // re-issue the far instancing for the view the camera is in.
+                Crowd.PreviewVisuals(Camera.main != null ? Camera.main.transform.position : Vector3.zero);
             }
             BuildingsRuntime.PushSceneLights();
         }

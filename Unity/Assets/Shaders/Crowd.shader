@@ -114,11 +114,19 @@ Shader "NEON KAIDO/Crowd"
                 }
                 float3 V = normalize(_WorldSpaceCameraPos.xyz - IN.worldPos);
                 float ndl = saturate(dot(N, _SkyLightDir));
-                float3 lit = _SkyLightColor * ndl
-                           + _AmbientSky * saturate(N.y * 0.5 + 0.5)
+                float3 amb = _AmbientSky * saturate(N.y * 0.5 + 0.5)
                            + _AmbientGround * saturate(-N.y * 0.5 + 0.5);
+                // characters.js materials are MeshStandard under a 0.12 hemisphere light plus a
+                // 0.3 env map built from horizon neon panels, so the reference crowd always reads
+                // as figures. The port's ambient is the city's sky/ground bounce only (~0.04),
+                // which left every NPC a black cut-out; restore that fill from the atmosphere.
+                float3 env = _GlowMagenta * 0.55 + _GlowOrange * 0.75 + _GlowBlue * 0.35;
+                float3 lit = _SkyLightColor * ndl + amb * 6.0 + env * 1.1 * (1.0 - saturate(N.y));
                 lit += NkBPointLights(N, IN.worldPos, V, albedo, 0.7, 0.0, albedo);
                 float3 col = albedo * lit + _Emissive.rgb * _Emissive.a;
+                // Wet sheen: the reference gets a grazing rim off the env map on soaked coats.
+                float rim = pow(1.0 - saturate(dot(N, V)), 3.0) * _Wetness;
+                col += rim * (amb * 5.0 + env * 1.2) * 0.35;
                 col = NkFogApply(col, IN.worldPos, _WorldSpaceCameraPos.xyz, 0.02, 1.0,
                     _FogColor.xyz, _MidColor.xyz, _ZenithColor.xyz, _GlowMagenta.xyz, _GlowOrange.xyz,
                     _GlowBlue.xyz, _GroundHaze.xyz, _SkyBrightness);

@@ -109,6 +109,7 @@ namespace NeonKaido
         {
             public string sex;
             public List<string> outfits = new List<string>();
+            public Dictionary<string, float> outfitSole = new Dictionary<string, float>();
             public Dictionary<string, double> clipPeriod = new Dictionary<string, double>();
             public Dictionary<string, Vector4> matColor = new Dictionary<string, Vector4>();
             public Dictionary<string, float> matRough = new Dictionary<string, float>();
@@ -132,6 +133,12 @@ namespace NeonKaido
 
         class CrowdNormScale : MonoBehaviour { public float scale = 1f; }
 
+        /// Baked idler rows (11 floats each). Lives on its own object so a Crowd rebuild does not
+        /// delete it: the facade cache that produces the rows only exists in the session that ran
+        /// the buildings build, so without this every later load would fall back to the old
+        /// avenue-frontage sprinkle and lose the shopfront clusters the browser shows.
+        public class CrowdSpawns : MonoBehaviour { public float[] idlers; }
+
         class NearSlot
         {
             public GameObject go;
@@ -145,6 +152,19 @@ namespace NeonKaido
             public Agent agent;
             public string curClip;
             public int curOutfit = -1;
+        }
+
+        static Shader _shader;
+        /// Shader.Find can return null while a scene is still loading (the crowd preview builds
+        /// on the first editor tick after open_scene). A material made from a null shader renders
+        /// magenta forever, so every create site goes through this and callers bail out instead.
+        static Shader CrowdShader
+        {
+            get
+            {
+                if (_shader == null) _shader = Shader.Find("NEON KAIDO/Crowd");
+                return _shader;
+            }
         }
 
         static Meta[] _meta = new Meta[2]; // 0 male, 1 female
@@ -161,22 +181,35 @@ namespace NeonKaido
         static List<Lane> _lanes = new List<Lane>();
         static NearSlot[] _slots;
         static Mulberry32 _rnd;
-        static float _nextScan = -1f;
+        static float[] _idleRows;
+        static GameObject _root;
 
         const float NearDist = 34f;
         const float FarDist = 170f;
         const int MaxNear = 24;
         const string Dir = "Assets/Game/Models/Crowd";
 
-        public static bool Built { get; private set; }
+        /// The root is the truth: a scene load destroys the HideAndDontSave crowd while the
+        /// statics survive, so a cached bool would claim "built" with dead slots.
+        public static bool Built => _root != null;
 
         // ---------------------------------------------------------------- build
         public static string Build(Transform parent)
         {
-            var old = GameObject.Find("Crowd");
-            if (old != null) UnityEngine.Object.DestroyImmediate(old);
+            if (CrowdShader == null) return "crowd: shader not loaded yet";
+            // runtime materials and baked meshes do not survive a scene load; a cached reference
+            // to a destroyed one instantiates to null (magenta or invisible slots)
+            _nearMats.Clear(); _poseMat.Clear(); _farMatFor.Clear();
+            _poseMesh = null; _canopyMesh = null; _canopyMats = null;
+            DestroyStaleRoots();
             var root = new GameObject("Crowd");
             root.transform.SetParent(parent, false);
+            // Runtime-only: the agents are rebuilt from the seed on every entry to Play, so a
+            // serialized copy in Main.unity is 24 frozen characters that cost load time and get
+            // deleted on the first frame anyway. The baked idler table is the only part that
+            // needs to persist (see CrowdSpawns).
+            root.hideFlags = HideFlags.HideAndDontSave;
+            _root = root;
 
             for (int sex = 0; sex < 2; sex++)
             {
@@ -186,12 +219,17 @@ namespace NeonKaido
                 if (_prefab[sex] == null) return $"crowd: prefab {(sex == 0 ? "male" : "female")} missing";
             }
 
-            _matBody = new Material(Shader.Find("NEON KAIDO/Crowd"));
-            _matGarment = new Material(Shader.Find("NEON KAIDO/Crowd"));
+            _matBody = new Material(CrowdShader) { hideFlags = HideFlags.DontSave };
+            _matGarment = new Material(CrowdShader) { hideFlags = HideFlags.DontSave };
+            BakeCanopies();
 
             _rnd = new Mulberry32(20771u);
+            _agents.Clear();
+            _lanes.Clear();
+            _idleRows = LoadBakedIdlers();
             BuildLanes();
             SpawnAgents();
+            if (_idleRows != null && FacadeAPI.Collect().Count > 0) StoreBakedIdlers(_idleRows, root.transform.parent);
 
             // far pose baking
             _poseMesh = new Mesh[2, 12, 6];
@@ -207,10 +245,50 @@ namespace NeonKaido
                 _slots[i].go.SetActive(false);
             }
 
-            Built = true;
             int walkers = 0, idlers = 0;
             foreach (var a in _agents) { if (a.kind == "idle") idlers++; else walkers++; }
             return $"crowd: agents={_agents.Count} (walk {walkers}, idle {idlers}) poses=12x6 near={MaxNear}";
+        }
+
+        /// Every recompile/play session leaves its HideAndDontSave crowd behind (the objects are
+        /// in an internal scene, so GameObject.Find returns one of them and FindObjectsByType
+        /// returns none). Undestroyed they pile up — eight roots, 192 characters, only one of them
+        /// positioned — so the sweep has to use Resources.FindObjectsOfTypeAll and must never
+        /// touch anything without the DontSave flag.
+        static void DestroyStaleRoots()
+        {
+            _root = null;
+            foreach (var g in UnityEngine.Resources.FindObjectsOfTypeAll<UnityEngine.GameObject>())
+            {
+                if (g == null || g.name != "Crowd") continue;
+                if ((g.hideFlags & HideFlags.DontSave) == 0) continue;
+                UnityEngine.Object.DestroyImmediate(g);
+            }
+        }
+
+        static float[] LoadBakedIdlers()
+        {
+            var go = GameObject.Find("CrowdSpawns");
+            if (go == null)
+            {
+                var all = UnityEngine.Object.FindObjectsByType<CrowdSpawns>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                if (all.Length > 0) go = all[0].gameObject;
+            }
+            var c = go != null ? go.GetComponent<CrowdSpawns>() : null;
+            return c != null && c.idlers != null && c.idlers.Length > 0 ? c.idlers : null;
+        }
+
+        static void StoreBakedIdlers(float[] rows, Transform parent)
+        {
+            var go = GameObject.Find("CrowdSpawns");
+            if (go == null)
+            {
+                go = new GameObject("CrowdSpawns");
+                if (parent != null) go.transform.SetParent(parent, false);
+            }
+            var c = go.GetComponent<CrowdSpawns>();
+            if (c == null) c = go.AddComponent<CrowdSpawns>();
+            c.idlers = rows;
         }
 
         static Meta LoadMeta(int sex)
@@ -219,7 +297,15 @@ namespace NeonKaido
             int p = 0;
             var rootJ = AsDict(JsonParse(txt, ref p));
             var m = new Meta { sex = sex == 0 ? "male" : "female" };
-            foreach (var k in AsDict(rootJ["outfits"]).Keys) m.outfits.Add(k);
+            var outfits = AsDict(rootJ["outfits"]);
+            foreach (var k in outfits.Keys)
+            {
+                m.outfits.Add(k);
+                // characters.js lifts each outfit by meta.outfits[o].sole so the soles, not the
+                // origin, sit on the pavement.
+                var od = AsDict(outfits[k]);
+                m.outfitSole[k] = od != null && od.TryGetValue("sole", out var sole) ? (float)AsNum(sole) : 0f;
+            }
             foreach (var kv in AsDict(rootJ["clips"]))
             {
                 var cd = AsDict(kv.Value);
@@ -250,11 +336,15 @@ namespace NeonKaido
         static Material GetNearMat(Meta meta, string matName)
         {
             if (_nearMats.TryGetValue(matName, out var m)) return m;
-            var shader = Shader.Find("NEON KAIDO/Crowd");
-            var mat = new Material(shader);
+            var shader = CrowdShader;
+            if (shader == null) return null;
+            var mat = new Material(shader) { hideFlags = HideFlags.DontSave };
             bool bodyLike = matName == "skin" || matName == "eyes" || matName == "brow" || matName == "hair" || matName == "lashes";
             meta.matColor.TryGetValue(matName, out var col);
             meta.matRough.TryGetValue(matName, out var rough);
+            // characters.js builds umb_clear from a hard-coded 0xdfe8f0 (translucent plastic) and
+            // ignores the meta colour; without this the clear umbrella renders as tan leather.
+            if (matName == "umb_clear") col = new Vector4(0.874f, 0.910f, 0.941f, 1f);
             mat.SetColor("_Tint", bodyLike ? new Vector4(col.x, col.y, col.z, 1) : new Vector4(1, 1, 1, 1));
             mat.SetColor("_SkinColor", new Vector4(col.x, col.y, col.z, 1));
             mat.SetFloat("_UseMap", meta.matMap.ContainsKey(matName) ? 1f : 0f);
@@ -280,7 +370,8 @@ namespace NeonKaido
             var key = $"{sex}:{outfit}:{tintV}";
             if (_poseMat.TryGetValue(key, out var m)) return m;
             var meta = _meta[sex];
-            var mat = new Material(Shader.Find("NEON KAIDO/Crowd"));
+            if (CrowdShader == null) return null;
+            var mat = new Material(CrowdShader) { hideFlags = HideFlags.DontSave };
             // garment tint from palette (fallback: outfit meta color)
             Vector3 tint = new Vector3(1, 1, 1);
             var pk = PickPaletteKey(outfit, sex);
@@ -319,25 +410,21 @@ namespace NeonKaido
         {
             var go = UnityEngine.Object.Instantiate(_prefab[sex], parent);
             go.name = "crowdTemp";
-            // normalize height to ~1.7 m
-            var bounds = BoundsOf(go);
-            float h = bounds.size.y;
-            if (h > 0.01f)
-            {
-                float f = 1.7f / h;
-                go.transform.localScale = go.transform.localScale * f;
-            }
-            go.AddComponent<CrowdNormScale>().scale = go.transform.localScale.x;
+            // The FBX carries a 100x armature scale that the meshes are authored against, so a
+            // SkinnedMeshRenderer reports bind-pose bounds of ~197 m for a 1.7 m character. This
+            // used to normalise to 1.7 m from those bounds, which shrank every NPC to 1.5 cm —
+            // alive, walking, and completely invisible. The skeleton itself is human scale (bones
+            // span -0.02..1.57 m, the meta's sole offsets are 25 mm), and the browser uses the
+            // model as authored, so nothing is scaled here. CrowdNormScale stays as the one place
+            // a future re-scale would go.
+            go.AddComponent<CrowdNormScale>().scale = 1f;
+            // characters.js makeTemplate() keeps only the outfit and the accessories; the GLB's
+            // "Icosphere" is an unused placeholder, and left visible it renders as a 2.5 m
+            // skin-coloured sphere around the character's waist.
+            var ico = go.transform.Find("Icosphere");
+            if (ico != null) ico.gameObject.SetActive(false);
             go.SetActive(true);
             return go;
-        }
-
-        static Bounds BoundsOf(GameObject go)
-        {
-            var b = new Bounds(go.transform.position, Vector3.zero);
-            foreach (var r in go.GetComponentsInChildren<Renderer>())
-                b.Encapsulate(r.bounds);
-            return b;
         }
 
         // bake 4 walk + 2 idle poses: body+outfit merged, uv2.x = 0 body / 1 garment
@@ -355,16 +442,14 @@ namespace NeonKaido
                     clips[c.name.Substring(c.name.IndexOf('|') + 1)] = c;
             }
             foreach (var kv in clips) anim.AddClip(kv.Value, kv.Key);
-            var bodyTr = temp.transform.Find("Icosphere");
             var outfitTr = temp.transform.Find("outfit_" + outfit);
-            // disable all outfits except the chosen one; hide accessories
+            // keep the chosen outfit (and the skeleton); the Icosphere placeholder and every
+            // accessory stay off — the far LOD is the outfit alone, like the browser's clone
             foreach (Transform ch in temp.transform)
             {
-                bool on = ch == bodyTr || ch == outfitTr || ch.name.StartsWith("Armature");
+                bool on = ch == outfitTr || ch.name.StartsWith("Armature");
                 ch.gameObject.SetActive(on);
             }
-            var bodyMR = bodyTr.GetComponent<MeshRenderer>();
-            var bodyMF = bodyTr.GetComponent<MeshFilter>();
             var outfitR = outfitTr.GetComponent<SkinnedMeshRenderer>();
             var baked = new[] { "walk", "walk", "walk", "walk", "idle", "idle_b" };
             var bakedT = new[] { 0.05f, 0.3f, 0.55f, 0.8f, 0.25f, 0.6f };
@@ -376,29 +461,25 @@ namespace NeonKaido
                 state.weight = 1;
                 state.time = bakedT[pose] * (float)meta.clipPeriod[clipName];
                 anim.Sample();
-                Mesh mb;
-                if (bodyMR != null)
-                {
-                    // bone-attached static body: transform local verts by its animated world matrix
-                    var src = bodyMF.sharedMesh;
-                    var srcV = src.vertices;
-                    var toRoot = temp.transform.worldToLocalMatrix * bodyTr.localToWorldMatrix;
-                    var moved = new Vector3[srcV.Length];
-                    for (int vi = 0; vi < srcV.Length; vi++) moved[vi] = toRoot.MultiplyPoint3x4(srcV[vi]);
-                    mb = new Mesh { indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
-                    mb.vertices = moved;
-                    mb.normals = src.normals;
-                    mb.uv = src.uv;
-                    mb.triangles = src.triangles;
-                }
-                else
-                {
-                    mb = new Mesh();
-                    bodyTr.GetComponent<SkinnedMeshRenderer>().BakeMesh(mb);
-                }
                 var mo = new Mesh();
                 outfitR.BakeMesh(mo);
-                _poseMesh[sex, oi, pose] = MergePoses(mb, mo);
+                // BakeMesh is in the renderer's local space, which misses the outfit node's 270 deg
+                // X rotation and 100x scale: untransformed the far crowd is baked lying on its
+                // back, 1.8 m long down Z. Take it to the character's space, then divide out the
+                // node scale the skinning already carries.
+                var l2w = outfitR.transform.localToWorldMatrix;
+                float inv = 1f / Mathf.Max(1e-4f, outfitR.transform.lossyScale.x);
+                var mtx = temp.transform.worldToLocalMatrix * l2w;
+                var vs = mo.vertices;
+                var ns = mo.normals;
+                for (int vi = 0; vi < vs.Length; vi++)
+                {
+                    vs[vi] = mtx.MultiplyPoint3x4(vs[vi]) * inv;
+                    ns[vi] = mtx.MultiplyVector(ns[vi]).normalized;
+                }
+                mo.vertices = vs;
+                mo.normals = ns;
+                _poseMesh[sex, oi, pose] = GarmentOnly(mo);
             }
             UnityEngine.Object.DestroyImmediate(temp);
         }
@@ -409,31 +490,87 @@ namespace NeonKaido
             return clips.Keys.Count > 0 ? new List<string>(clips.Keys)[0] : null;
         }
 
-        static Mesh MergePoses(Mesh body, Mesh outfit)
+        /// Far pose mesh from a baked outfit: flag every vertex as garment (uv2.x = 1) so the
+        /// crowd shader tints it with the palette colour rather than the skin colour.
+        static Mesh GarmentOnly(Mesh outfit)
         {
-            int nb = body.vertexCount, no = outfit.vertexCount;
-            var verts = new Vector3[nb + no];
-            var norms = new Vector3[nb + no];
-            var uv0 = new Vector2[nb + no];
-            var uv2 = new Vector2[nb + no];
-            var tris = new int[(body.triangles.Length + outfit.triangles.Length)];
-            Array.Copy(body.vertices, verts, nb);
-            Array.Copy(outfit.vertices, 0, verts, nb, no);
-            Array.Copy(body.normals, norms, nb);
-            Array.Copy(outfit.normals, 0, norms, nb, no);
-            for (int i = 0; i < nb + no; i++) { uv0[i] = new Vector2(0.5f, 0.5f); uv2[i] = new Vector2(i < nb ? 0f : 1f, 0); }
-            var tb = body.triangles;
-            var to = outfit.triangles;
-            for (int i = 0; i < tb.Length; i++) tris[i] = tb[i];
-            for (int i = 0; i < to.Length; i++) tris[tb.Length + i] = to[i] + nb;
+            int n = outfit.vertexCount;
+            var uv0 = new Vector2[n];
+            var uv2 = new Vector2[n];
+            for (int i = 0; i < n; i++) { uv0[i] = new Vector2(0.5f, 0.5f); uv2[i] = new Vector2(1f, 0); }
             var m = new Mesh { indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
-            m.vertices = verts;
-            m.normals = norms;
+            m.vertices = outfit.vertices;
+            m.normals = outfit.normals;
             m.uv = uv0;
             m.uv2 = uv2;
-            m.triangles = tris;
+            m.triangles = outfit.triangles;
             m.RecalculateBounds();
             return m;
+        }
+
+        // ---------------------------------------------------------------- umbrella canopies (far LOD)
+        // Near agents use the FBX umbrella nodes as they are. The far pose meshes are baked from
+        // one outfit and carry no accessories at all, and in the rain that is most of the street's
+        // silhouette — so each canopy is baked once into a rigid, correctly sized prop and drawn
+        // instanced at 1.72 m over every far agent that has an umbrella (vat.js does the same with
+        // a hand matrix; the canopy does not need to sway this far away).
+        static readonly string[] UmbrellaNames = { "umbrella_black", "umbrella_clear", "umbrella_led" };
+        static Mesh[] _canopyMesh;                 // per kind, shared by both sexes
+        static Material[,][] _canopyMats;          // [sex, kind] -> submesh materials
+        const float CanopyWidth = 1.15f;           // canopy diameter, metres
+        const float CanopyY = 1.72f;               // canopy centre above the soles
+
+        static void BakeCanopies()
+        {
+            _canopyMesh = new Mesh[3];
+            _canopyMats = new Material[2, 3][];
+            var temp = MakeTemp(null, 0);
+            var toRoot = temp.transform.worldToLocalMatrix;
+            for (int k = 0; k < 3; k++)
+            {
+                var tr = temp.transform.Find(UmbrellaNames[k]);
+                var smr = tr != null ? tr.GetComponent<SkinnedMeshRenderer>() : null;
+                if (smr == null) continue;
+                var baked = new Mesh { indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
+                smr.BakeMesh(baked);
+                // BakeMesh is in the renderer's local space, which does not include the node's
+                // rotation; take it to the character's space before measuring it.
+                var l2w = tr.localToWorldMatrix;
+                var verts = baked.vertices;
+                var norms = baked.normals;
+                var b = new Bounds();
+                bool first = true;
+                for (int i = 0; i < verts.Length; i++)
+                {
+                    var w = toRoot.MultiplyPoint3x4(l2w.MultiplyPoint3x4(verts[i]));
+                    verts[i] = w;
+                    norms[i] = (toRoot.MultiplyVector(l2w.MultiplyVector(norms[i]))).normalized;
+                    if (first) { b = new Bounds(w, Vector3.zero); first = false; } else b.Encapsulate(w);
+                }
+                float wid = Mathf.Max(b.size.x, b.size.z);
+                float f = wid > 1e-4f ? CanopyWidth / wid : 1f;
+                for (int i = 0; i < verts.Length; i++)
+                    verts[i] = (verts[i] - b.center) * f;
+                baked.vertices = verts;
+                baked.normals = norms;
+                baked.RecalculateBounds();
+                _canopyMesh[k] = baked;
+                var mats = new Material[smr.sharedMaterials.Length];
+                for (int i = 0; i < mats.Length; i++)
+                {
+                    var mn = smr.sharedMaterials[i] != null ? smr.sharedMaterials[i].name.Replace("(Instance)", "").Trim() : "";
+                    mats[i] = mn.Length > 0 ? GetNearMat(_meta[0], mn) : null;
+                }
+                _canopyMats[0, k] = mats;
+                var matsF = new Material[mats.Length];
+                for (int i = 0; i < mats.Length; i++)
+                {
+                    var mn = smr.sharedMaterials[i] != null ? smr.sharedMaterials[i].name.Replace("(Instance)", "").Trim() : "";
+                    matsF[i] = mn.Length > 0 ? GetNearMat(_meta[1], mn) : null;
+                }
+                _canopyMats[1, k] = matsF;
+            }
+            UnityEngine.Object.DestroyImmediate(temp);
         }
 
         // ---------------------------------------------------------------- near pool
@@ -489,7 +626,12 @@ namespace NeonKaido
                 {
                     if (mats[i] == null) continue;
                     var mn = mats[i].name.Replace("(Instance)", "").Trim();
-                    var m = UnityEngine.Object.Instantiate(GetNearMat(meta, mn));
+                    var src0 = GetNearMat(meta, mn);
+                    if (src0 == null) continue;
+                    var m = UnityEngine.Object.Instantiate(src0);
+                    // Instantiate does not carry hideFlags: without this the per-slot material is
+                    // destroyed by the next scene load and every NPC loses its clothing.
+                    m.hideFlags = HideFlags.DontSave;
                     m.name = mn;
                     var tint = GarmentTint(mn, ag.tint + i);
                     m.SetColor("_Tint", new Vector4(tint.x, tint.y, tint.z, 1));
@@ -510,7 +652,12 @@ namespace NeonKaido
                 {
                     if (mats[i] == null) continue;
                     var mn = mats[i].name.Replace("(Instance)", "").Trim();
-                    var m = UnityEngine.Object.Instantiate(GetNearMat(meta, mn));
+                    var src0 = GetNearMat(meta, mn);
+                    if (src0 == null) continue;
+                    var m = UnityEngine.Object.Instantiate(src0);
+                    // Instantiate does not carry hideFlags: without this the per-slot material is
+                    // destroyed by the next scene load and every NPC loses its clothing.
+                    m.hideFlags = HideFlags.DontSave;
                     m.name = mn;
                     if (mn == "hair")
                     {
@@ -598,7 +745,96 @@ namespace NeonKaido
                     _agents.Add(ag);
                 }
             }
-            // idlers: fallback avenue frontage (facade spots deferred)
+            // idlers: under shopfront awnings (agents.js spawnIdlers). Needs the facade cache,
+            // which only exists in a session that ran the buildings build — so the list is baked
+            // into the scene (CrowdSpawns) and replayed on every later load.
+            var spots = new List<SFacade>();
+            var facades = FacadeAPI.Collect();
+            foreach (var f in facades)
+                if (f.Shopfront && f.District != "river") spots.Add(f);
+            if (spots.Count > 0) SpawnIdlersAt(spots);
+            else if (!ReplayIdlers()) SpawnIdlersFallback();
+        }
+
+        // One idler: x/z in sim space, yaw/turn in radians. Packed 12 floats per record:
+        // x, z, yaw, phase, sex, outfit, tint, scale, gaits(0 none,1 black,2 clear,3 led), phone, clip, pad
+        static readonly string[] IdleClips = { "idle", "idle_b", "phone_idle", "umbrella_idle" };
+
+        static void SpawnIdlersAt(List<SFacade> spots)
+        {
+            var r = _rnd;
+            var rows = new List<float>();
+            foreach (var f in spots)
+            {
+                if (r.Next() > 0.55) continue;
+                int n = r.Next() < 0.3 ? 2 : 1;
+                // facade vectors are Unity space; sd = sim mirror
+                var cs = f.CS(); var ns = f.NS(); var rs = f.RS();
+                double off = (r.Next() - 0.5) * Math.Min(f.Width, 10) * 0.7;
+                double d = 0.55 + r.Next() * 0.5;
+                double x = cs.x + ns.x * d + rs.x * off, z = cs.z + ns.z * d + rs.z * off;
+                double outYaw = Math.Atan2(ns.x, ns.z);
+                if (n == 2)
+                {
+                    // two people chatting: face each other
+                    double yaw = outYaw + Math.PI / 2 + (r.Next() - 0.5) * 0.4;
+                    double fx = Math.Sin(yaw), fz = Math.Cos(yaw);
+                    AddIdler(x - fx * 0.5, z - fz * 0.5, yaw, rows);
+                    AddIdler(x + fx * 0.5, z + fz * 0.5, yaw + Math.PI, rows);
+                }
+                else
+                {
+                    bool lookIn = r.Next() < 0.3; // window shopping
+                    AddIdler(x, z, (lookIn ? outYaw + Math.PI : outYaw) + (r.Next() - 0.5) * 0.8, rows);
+                }
+            }
+            _idleRows = rows.ToArray();
+        }
+
+        static void AddIdler(double x, double z, double yaw, List<float> rows)
+        {
+            var r = _rnd;
+            var ag = new Agent { id = _agents.Count, kind = "idle", x = x, z = z, yaw = yaw };
+            Look(r, ag);
+            ag.phase = r.Next();
+            RainGear(r, ag);
+            if (r.Next() < 0.25) ag.phone = ag.umbrella == null;
+            ag.clip = ag.umbrella != null ? "umbrella_idle" : ag.phone ? "phone_idle" : (r.Next() < 0.5 ? "idle" : "idle_b");
+            _agents.Add(ag);
+            rows.Add((float)x); rows.Add((float)z); rows.Add((float)yaw); rows.Add((float)ag.phase);
+            rows.Add(ag.sex); rows.Add(ag.outfit); rows.Add(ag.tint); rows.Add(ag.scale);
+            rows.Add(ag.umbrella == "black" ? 1 : ag.umbrella == "clear" ? 2 : ag.umbrella == "led" ? 3 : 0);
+            rows.Add(ag.phone ? 1 : 0);
+            rows.Add(Array.IndexOf(IdleClips, ag.clip));
+        }
+
+        // runtime path: the facade cache is empty, so restore the baked idlers
+        static bool ReplayIdlers()
+        {
+            var rows = _idleRows;
+            if (rows == null || rows.Length < 11) return false;
+            for (int i = 0; i + 10 < rows.Length; i += 11)
+            {
+                var ag = new Agent
+                {
+                    id = _agents.Count, kind = "idle",
+                    x = rows[i], z = rows[i + 1], yaw = rows[i + 2], phase = rows[i + 3],
+                    sex = (int)rows[i + 4], outfit = (int)rows[i + 5], tint = (int)rows[i + 6],
+                    scale = rows[i + 7],
+                    umbrella = rows[i + 8] == 1 ? "black" : rows[i + 8] == 2 ? "clear" : rows[i + 8] == 3 ? "led" : null,
+                    phone = rows[i + 9] > 0.5f,
+                };
+                int ci = (int)rows[i + 10];
+                ag.clip = ci >= 0 && ci < IdleClips.Length ? IdleClips[ci] : "idle";
+                _agents.Add(ag);
+            }
+            return true;
+        }
+
+        static void SpawnIdlersFallback()
+        {
+            var r = _rnd;
+            // no facade data at all: sprinkle the avenue frontage (old behaviour)
             for (double z = 60; z > -420; z -= 7 + r.Next() * 10)
             {
                 foreach (var s in new[] { 1, -1 })
@@ -606,9 +842,8 @@ namespace NeonKaido
                     if (r.Next() < 0.5) continue;
                     var ag = new Agent { id = _agents.Count, kind = "idle", x = s * (6 + 4 - 0.45), z = z + r.Next() * 3, yaw = 0 };
                     ag.yaw = (s > 0 ? -Math.PI / 2 : Math.PI / 2) + (r.Next() - 0.5);
-                    ag.y += 0;
-                    ag.phase = r.Next();
                     Look(r, ag);
+                    ag.phase = r.Next();
                     RainGear(r, ag);
                     if (r.Next() < 0.25) ag.phone = ag.umbrella == null;
                     ag.clip = ag.umbrella != null ? "umbrella_idle" : ag.phone ? "phone_idle" : (r.Next() < 0.5 ? "idle" : "idle_b");
@@ -647,12 +882,10 @@ namespace NeonKaido
 
         public static void Update(float dt, float t, Vector3 playerPos)
         {
-            if (GameObject.Find("Crowd") == null) Built = false; // play-mode scene reload destroyed the root
-            if (!Built)
-            {
-                var root0 = new GameObject("Crowd");
-                Build(root0.transform);
-            }
+            // A play-mode scene load destroys the root but leaves the statics; a Find here every
+            // frame walked the whole 1 GB scene graph, so test the reference instead.
+            if (_root == null) _slots = null;
+            if (!Built) Build(null);
             Simulate(dt);
             // ground heights only refresh near the player is unnecessary; compute lazily per agent
             UpdateNear(playerPos, dt);
@@ -752,14 +985,30 @@ namespace NeonKaido
 
         static void UpdateNear(Vector3 playerPos, float dt)
         {
-            // near set: closest walkers+idlers within NearDist
+            if (_slots == null) return;
+            // near set: closest walkers+idlers within NearDist, behind-camera agents excluded
+            // (index.js culls fd < -0.25 past 4 m before ranking, otherwise the skinned pool is
+            // spent on the crowd standing behind the player). Already-skinned agents get 4 m of
+            // hysteresis so someone walking the boundary cannot swap LOD every frame.
+            var cam = UnityEngine.Camera.main;
+            Vector3 fwd = cam != null ? cam.transform.forward : Vector3.forward;
+            float fwdLen = Mathf.Sqrt(fwd.x * fwd.x + fwd.z * fwd.z);
+            if (fwdLen < 1e-3f) fwdLen = 1e-3f;
             nearBuf.Clear();
             foreach (var ag in _agents)
             {
                 float dx = (float)ag.x - playerPos.x;
                 float dz = (float)(-ag.z) - playerPos.z;
                 float d2 = dx * dx + dz * dz;
-                if (d2 < NearDist * NearDist) nearBuf.Add((ag, d2));
+                float reach = ag.slot >= 0 ? NearDist + 4f : NearDist;
+                if (d2 > reach * reach) continue;
+                float d = Mathf.Sqrt(d2);
+                if (d > 4f)
+                {
+                    float fd = (dx * fwd.x + dz * fwd.z) / (d * fwdLen);
+                    if (fd < -0.25f) continue;
+                }
+                nearBuf.Add((ag, d2));
             }
             nearBuf.Sort((a, b) => a.Item2.CompareTo(b.Item2));
             var chosen = new HashSet<Agent>();
@@ -768,15 +1017,16 @@ namespace NeonKaido
             // free slots not chosen
             foreach (var s in _slots)
                 if (s.agent != null && !chosen.Contains(s.agent)) { s.go.SetActive(false); s.agent.slot = -1; s.agent = null; }
-            // assign
+            // assign (a slot only ever takes its own sex — continue searched the agent list here,
+            // so a mismatched head of the queue used to starve the whole pool)
             for (int i = 0; i < cap; i++)
             {
                 var ag = nearBuf[i].Item1;
                 if (ag.slot >= 0) continue;
                 NearSlot free = null;
-                foreach (var s in _slots) if (s.agent == null) { free = s; break; }
-                if (free == null) break;
-                if (free.sex != ag.sex) continue;
+                for (int si = 0; si < _slots.Length; si++)
+                    if (_slots[si].agent == null && _slots[si].sex == ag.sex) { free = _slots[si]; break; }
+                if (free == null) continue;
                 free.agent = ag;
                 ag.slot = Array.IndexOf(_slots, free);
                 free.go.SetActive(true);
@@ -787,7 +1037,8 @@ namespace NeonKaido
             {
                 if (s.agent == null) continue;
                 var ag = s.agent;
-                float uy = GroundY(ag.x, -ag.z);
+                float sole = _meta[ag.sex].outfitSole.TryGetValue(_meta[ag.sex].outfits[ag.outfit], out var sl) ? sl : 0f;
+                float uy = GroundY(ag.x, ag.z) + sole * ag.scale;
                 s.go.transform.position = new Vector3((float)ag.x, uy, (float)(-ag.z));
                 s.go.transform.rotation = Quaternion.Euler(0, (float)(ag.yaw * 180.0 / Math.PI), 0);
                 s.go.transform.localScale = Vector3.one * s.normScale;
@@ -817,12 +1068,14 @@ namespace NeonKaido
 
         static readonly List<(Agent, float)> nearBuf = new List<(Agent, float)>();
         static readonly Dictionary<string, List<Matrix4x4>> _farBuckets = new Dictionary<string, List<Matrix4x4>>();
+        static readonly List<Matrix4x4>[] _umbBuckets = { new List<Matrix4x4>(), new List<Matrix4x4>(), new List<Matrix4x4>() };
         static readonly Dictionary<string, Material> _farMatFor = new Dictionary<string, Material>();
         static readonly Matrix4x4[] _mxBuf = new Matrix4x4[1023];
 
         static void DrawFar(Vector3 playerPos)
         {
             _farBuckets.Clear();
+            foreach (var l in _umbBuckets) l.Clear();
             foreach (var ag in _agents)
             {
                 if (ag.slot >= 0) continue; // near
@@ -831,9 +1084,19 @@ namespace NeonKaido
                 float d2 = dx * dx + dz * dz;
                 if (d2 > FarDist * FarDist) continue;
                 int pose = ag.kind == "idle" ? (ag.clip == "idle_b" ? 5 : 4) : Math.Min(3, (int)(ag.phase * 4));
+                // rain gear at distance: the pose meshes carry no accessories, so umbrellas are
+                // instanced separately from the baked canopy (as vat.js does with hand matrices)
+                if (ag.umbrella != null)
+                {
+                    int uk = ag.umbrella == "black" ? 0 : ag.umbrella == "clear" ? 1 : 2;
+                    float uy2 = GroundY(ag.x, ag.z) + CanopyY * ag.scale;
+                    _umbBuckets[uk].Add(Matrix4x4.TRS(new Vector3((float)ag.x, uy2, (float)(-ag.z)),
+                        Quaternion.Euler(0, (float)(ag.yaw * 180.0 / Math.PI), 0), new Vector3(ag.scale, ag.scale, ag.scale)));
+                }
                 var key = $"{ag.sex}:{ag.outfit}:{pose}:{ag.tint % 2}";
                 if (!_farBuckets.TryGetValue(key, out var list)) { list = new List<Matrix4x4>(); _farBuckets[key] = list; }
-                float uy = GroundY(ag.x, -ag.z);
+                float sole = _meta[ag.sex].outfitSole.TryGetValue(_meta[ag.sex].outfits[ag.outfit], out var sl) ? sl : 0f;
+                float uy = GroundY(ag.x, ag.z) + sole * ag.scale;
                 var rot = Quaternion.Euler(0, (float)(ag.yaw * 180.0 / Math.PI), 0);
                 var mx = Matrix4x4.TRS(new Vector3((float)ag.x, uy, (float)(-ag.z)), rot, new Vector3(ag.scale, ag.scale, ag.scale));
                 list.Add(mx);
@@ -847,9 +1110,9 @@ namespace NeonKaido
                 var mk = $"{sex}:{outfit}:{tv}";
                 if (!_farMatFor.TryGetValue(mk, out var mat))
                 {
-                    mat = new Material(Shader.Find("NEON KAIDO/Crowd"));
+                    mat = new Material(CrowdShader) { hideFlags = HideFlags.DontSave };
                     var src = GetPoseMat(sex, _meta[sex].outfits[outfit], tv);
-                    mat.CopyPropertiesFromMaterial(src);
+                    if (src != null) mat.CopyPropertiesFromMaterial(src);
                     mat.enableInstancing = true;
                     _farMatFor[mk] = mat;
                 }
@@ -861,6 +1124,77 @@ namespace NeonKaido
                     Graphics.DrawMeshInstanced(mesh, 0, mat, _mxBuf, n, null, UnityEngine.Rendering.ShadowCastingMode.Off, false);
                 }
             }
+            DrawFarUmbrellas();
+        }
+
+        static void DrawFarUmbrellas()
+        {
+            if (_canopyMesh == null) return;
+            for (int k = 0; k < 3; k++)
+            {
+                var list = _umbBuckets[k];
+                var mesh = _canopyMesh[k];
+                if (list.Count == 0 || mesh == null) continue;
+                var mats = _canopyMats[0, k];
+                for (int sub = 0; sub < mesh.subMeshCount; sub++)
+                {
+                    var mat = mats != null && sub < mats.Length ? mats[sub] : null;
+                    if (mat == null) continue;
+                    for (int i = 0; i < list.Count; i += 1023)
+                    {
+                        int n = Math.Min(1023, list.Count - i);
+                        for (int j = 0; j < n; j++) _mxBuf[j] = list[i + j];
+                        Graphics.DrawMeshInstanced(mesh, sub, mat, _mxBuf, n, null, UnityEngine.Rendering.ShadowCastingMode.Off, false);
+                    }
+                }
+            }
+        }
+
+        // ---------------------------------------------------------------- editor preview
+        // The sim is driven from PlayerController.Update, which the Editor never runs, so outside
+        // Play mode the crowd was simply absent — no agents, no far instances, nothing. This is
+        // the same treatment the cars get: build once, place the skinned pool around the camera,
+        // and issue the far instancing draws. Everything is HideAndDontSave, so Main.unity never
+        // gains a frozen crowd (the only thing the scene keeps is the baked idler table).
+        static bool _previewHooked;
+
+        /// Drop the preview hierarchy. A scene load destroys the runtime materials but can leave
+        /// the HideAndDontSave root itself alive, so the slots would keep dead material refs.
+        public static void ResetPreview()
+        {
+            DestroyStaleRoots();
+            _slots = null;
+        }
+
+        public static void PreviewVisuals(Vector3 camPos)
+        {
+            if (_root == null) _slots = null;
+            if (!Built) Build(null);
+            if (!Built) return;
+            if (!_previewHooked)
+            {
+                _previewHooked = true;
+                UnityEngine.Rendering.RenderPipelineManager.beginCameraRendering += (ctx, camera) =>
+                {
+                    // One Graphics.DrawMeshInstanced call survives exactly one frame, so the far
+                    // LOD has to be re-issued inside every camera render — an editor Tick would
+                    // leave the distance empty by the time anything is captured.
+                    if (Application.isPlaying || !Built) return;
+                    DrawFar(camera.transform.position);
+                };
+            }
+            Simulate(0f);
+            UpdateNear(camPos, 0f);
+            DrawFar(camPos);
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        static void DropEditorPreview()
+        {
+            // HideAndDontSave objects outlive the edit-mode scene load and would freeze a second
+            // crowd under the live one; the sim rebuilds from scratch anyway.
+            _slots = null;
+            DestroyStaleRoots();
         }
     }
 }
