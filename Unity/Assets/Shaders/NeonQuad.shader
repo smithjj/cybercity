@@ -2,7 +2,9 @@
 // letters, billboard LED strips, and any flat glowing signage. Fog + AgX applied.
 Shader "NEON KAIDO/NeonQuad"
 {
-    Properties { _MainTex ("tex", 2D) = "white" {} }
+    // _Intensity MUST be declared here: an HLSL uniform alone is dropped when the material is
+    // refreshed/reloaded, leaving it at 0 and multiplying every NeonQuad surface to black.
+    Properties { _MainTex ("tex", 2D) = "white" {} _Intensity ("intensity", Float) = 1 }
     SubShader
     {
         Tags { "RenderPipeline" = "HDRenderPipeline" "RenderType" = "Opaque" }

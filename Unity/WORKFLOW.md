@@ -220,6 +220,8 @@ session. It takes **Unity** coordinates — sim `(x, y, z)` maps to Unity `(x, y
 | Two captures disagree wildly | weather/traffic re-randomised between sessions |
 | Player walks through the stairs | visual steps have no colliders; the ramp collider mirror is wrong (§7) |
 | Trees/rails stretch into long slivers, a dotted grid crawls over the paving | a merged mesh passed 65,535 verts without `indexFormat = UInt32`; UInt16 indices wrap and weld distant triangles (see PORTING.md) |
+| A billboard/screen is a black slab from the front although its texture is bound | the sim→Unity mirror flipped the winding; reverse the triangle order (a Cull Off diagnostic material proves it) |
+| A material value looks right in-session then goes black/zero after `open_scene` | the property is not declared in the shader's `Properties{}`; an HLSL uniform alone is dropped on reload |
 | `unity.exe: not found` from a tool | that tool hardcodes `C:/...`; run it from Windows, or use an `nk*` one |
 
 ---

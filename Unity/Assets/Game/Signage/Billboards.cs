@@ -56,7 +56,9 @@ namespace NeonKaido
                 Vector3[] p = { c - r * hw - u * hh, c + r * hw - u * hh, c + r * hw + u * hh, c - r * hw + u * hh };
                 Vector2[] t = { new Vector2(0, 0), new Vector2(1, 0), new Vector2(1, 1), new Vector2(0, 1) };
                 for (int i = 0; i < 4; i++) { vv.Add(Mir(p[i])); cc.Add(tint); uu.Add(t[i]); }
-                ii.Add(b); ii.Add(b + 1); ii.Add(b + 2); ii.Add(b); ii.Add(b + 2); ii.Add(b + 3);
+                // The sim->unity mirror flips handedness, so reverse the winding or the front
+                // face ends up pointing away from the camera (Cull Back hides it).
+                ii.Add(b); ii.Add(b + 2); ii.Add(b + 1); ii.Add(b); ii.Add(b + 3); ii.Add(b + 2);
             }
 
             // oriented box in sim space
@@ -76,7 +78,8 @@ namespace NeonKaido
                 foreach (var q in quads)
                 {
                     foreach (int vi in q) { V.Add(Mir(p[vi])); C.Add(col); UV.Add(Vector2.zero); }
-                    Ix.Add(b); Ix.Add(b + 1); Ix.Add(b + 2); Ix.Add(b); Ix.Add(b + 2); Ix.Add(b + 3);
+                    // mirrored z flips handedness -> reverse each triangle (front face outward)
+                    Ix.Add(b); Ix.Add(b + 2); Ix.Add(b + 1); Ix.Add(b); Ix.Add(b + 3); Ix.Add(b + 2);
                     b += 4;
                 }
             }
@@ -107,7 +110,7 @@ namespace NeonKaido
                 foreach (var q in quads)
                 {
                     foreach (int vi in q) { V.Add(Mir(p[vi])); C.Add(col); UV.Add(Vector2.zero); }
-                    Ix.Add(b); Ix.Add(b + 1); Ix.Add(b + 2); Ix.Add(b); Ix.Add(b + 2); Ix.Add(b + 3);
+                    Ix.Add(b); Ix.Add(b + 2); Ix.Add(b + 1); Ix.Add(b); Ix.Add(b + 3); Ix.Add(b + 2);
                     b += 4;
                 }
             }
@@ -158,9 +161,16 @@ namespace NeonKaido
 
             // ---------- KAZE TECH letters above the billboard ----------
             {
-                float kW = 15, kH = kW * (256f / 1536f);
+                // kaze_tech.png is a 1536x256 sheet with the glyphs in a 341..1184 x 64..190 box;
+                // the JS draws the channel-letter rect, not the whole sheet, so crop and size the
+                // quad to the glyphs (aspect 6.76) instead of leaving a dark letterboxed bar.
+                const float glyphAspect = 6.762f;
+                float kW = 15, kH = kW / glyphAspect;
                 Vector3 kc = center + normal * 0.3f; kc.y = center.y + bbH / 2 + 1.4f + kH / 2;
                 Quad(NV, NI, NC, NUV, kc, bRight, UP, kW / 2, kH / 2, Color.white);
+                for (int i = NUV.Count - 4; i < NUV.Count; i++)
+                    NUV[i] = new Vector2(Mathf.Lerp(341f / 1536f, 1184f / 1536f, NUV[i].x),
+                                         Mathf.Lerp(0.258f, 0.75f, NUV[i].y));
                 Vector3 rc = center + bbH / 2 * Vector3.up;
                 Bar(rc + normal * -0.3f + bRight * (-kW * 0.4f), kc + normal * -0.3f + bRight * (-kW * 0.4f), 0.06f, steel);
                 Bar(rc + normal * -0.3f + bRight * (kW * 0.4f), kc + normal * -0.3f + bRight * (kW * 0.4f), 0.06f, steel);
@@ -192,7 +202,7 @@ namespace NeonKaido
                         SUV.Add(new Vector2((su + 1) / 2, (sv + 1) / 2));
                         SSD.Add(new Vector2(sIdx * 1.7f, 2.4f));
                     }
-                    SI.Add(b); SI.Add(b + 1); SI.Add(b + 2); SI.Add(b); SI.Add(b + 2); SI.Add(b + 3);
+                    SI.Add(b); SI.Add(b + 2); SI.Add(b + 1); SI.Add(b); SI.Add(b + 3); SI.Add(b + 2);
                 }
                 lights.Add((c + f.NS() * 4, new Color(0.8f, 0.5f, 1f), 70f, 22f));
                 sIdx++;
