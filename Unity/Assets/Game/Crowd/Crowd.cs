@@ -977,6 +977,12 @@ namespace NeonKaido
             }
         }
 
+        /// Sim heading -> Unity yaw. The world is mirrored in z (sim (x, y, z) is Unity (x, y, -z)),
+        /// so a sim heading theta points at (sin, cos) in sim space and (sin, -cos) here: the yaw is
+        /// pi - theta, not theta. Using theta turned every agent whose lane ran along z around,
+        /// which reads as the whole crowd walking backwards down the avenue.
+        static float UnityYawDeg(double simYaw) => (float)((Math.PI - simYaw) * (180.0 / Math.PI));
+
         static float GroundY(double x, double zsim)
         {
             var h = GroundPlan.HeightAt(x, zsim);
@@ -1040,7 +1046,7 @@ namespace NeonKaido
                 float sole = _meta[ag.sex].outfitSole.TryGetValue(_meta[ag.sex].outfits[ag.outfit], out var sl) ? sl : 0f;
                 float uy = GroundY(ag.x, ag.z) + sole * ag.scale;
                 s.go.transform.position = new Vector3((float)ag.x, uy, (float)(-ag.z));
-                s.go.transform.rotation = Quaternion.Euler(0, (float)(ag.yaw * 180.0 / Math.PI), 0);
+                s.go.transform.rotation = Quaternion.Euler(0, UnityYawDeg(ag.yaw), 0);
                 s.go.transform.localScale = Vector3.one * s.normScale;
                 // manual phase: set clip time
                 string key = ag.clip;
@@ -1091,13 +1097,13 @@ namespace NeonKaido
                     int uk = ag.umbrella == "black" ? 0 : ag.umbrella == "clear" ? 1 : 2;
                     float uy2 = GroundY(ag.x, ag.z) + CanopyY * ag.scale;
                     _umbBuckets[uk].Add(Matrix4x4.TRS(new Vector3((float)ag.x, uy2, (float)(-ag.z)),
-                        Quaternion.Euler(0, (float)(ag.yaw * 180.0 / Math.PI), 0), new Vector3(ag.scale, ag.scale, ag.scale)));
+                        Quaternion.Euler(0, UnityYawDeg(ag.yaw), 0), new Vector3(ag.scale, ag.scale, ag.scale)));
                 }
                 var key = $"{ag.sex}:{ag.outfit}:{pose}:{ag.tint % 2}";
                 if (!_farBuckets.TryGetValue(key, out var list)) { list = new List<Matrix4x4>(); _farBuckets[key] = list; }
                 float sole = _meta[ag.sex].outfitSole.TryGetValue(_meta[ag.sex].outfits[ag.outfit], out var sl) ? sl : 0f;
                 float uy = GroundY(ag.x, ag.z) + sole * ag.scale;
-                var rot = Quaternion.Euler(0, (float)(ag.yaw * 180.0 / Math.PI), 0);
+                var rot = Quaternion.Euler(0, UnityYawDeg(ag.yaw), 0);
                 var mx = Matrix4x4.TRS(new Vector3((float)ag.x, uy, (float)(-ag.z)), rot, new Vector3(ag.scale, ag.scale, ag.scale));
                 list.Add(mx);
             }

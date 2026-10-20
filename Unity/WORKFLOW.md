@@ -201,6 +201,11 @@ session. It takes **Unity** coordinates — sim `(x, y, z)` maps to Unity `(x, y
 - Coordinates: sim `(x, y, z)` → Unity `(x, y, −z)`. North is **+Z**.
 - `GameDebug.PoseCam` takes sim yaw and negates it internally. `PlayerController.Yaw` / `.Pitch` are
   radians, and positive pitch looks **down**.
+- **A sim heading is not a Unity yaw.** Mirroring z means a sim heading θ faces `(sinθ, −cosθ)` in
+  Unity, so an object whose mesh faces +Z at identity needs yaw **π − θ**; a mesh authored facing −Z
+  needs **−θ** (that is what the signage/lamp code uses). Getting this wrong is invisible on
+  x-aligned objects and 180° wrong on z-aligned ones — the crowd "walked backwards" down the avenue
+  for exactly this reason. Check which way the mesh faces before choosing.
 - `PlayerController.Teleport(x, y, z)` takes Unity coords, starts at `y`, and raycasts down to ground.
 - `GroundPlan.HeightAt(simX, simZ)` is the analytic ground profile used for snapping, not a model of
   the geometry: it treats the alley staircase as one 22 m ramp while the visual geometry is two
