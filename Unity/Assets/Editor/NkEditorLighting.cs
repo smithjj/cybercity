@@ -108,6 +108,10 @@ namespace NeonKaido.EditorTools
                 // Pedestrians: nothing of the crowd is serialized, so place the skinned pool and
                 // re-issue the far instancing for the view the camera is in.
                 Crowd.PreviewVisuals(Camera.main != null ? Camera.main.transform.position : Vector3.zero);
+                // Gig marker: runtime-only (DontSave materials) plus a shader global, so build it
+                // and push its distance fade for the Editor view.
+                Gameplay.PreviewMarker();
+                Gameplay.PushEditorGlobals(Camera.main != null ? Camera.main.transform.position : Vector3.zero);
             }
             BuildingsRuntime.PushSceneLights();
         }

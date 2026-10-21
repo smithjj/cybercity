@@ -24,6 +24,7 @@ Shader "NEON KAIDO/GigBeam"
             #pragma fragment Frag
             #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
             #include "Assets/Shaders/NkCommon.hlsl"
+            #include "Assets/Shaders/AgX.hlsl"
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _Color;
@@ -70,7 +71,12 @@ Shader "NEON KAIDO/GigBeam"
                     a = (edge * 0.85 + 0.12) * (scan * 0.35 + 0.65) + bands * 0.6;
                     a *= fade;
                     float g = lerp(_NearK, 1.0, _GigNear) * _Gain;
-                    return float4(_Color.rgb * a * g * 3.2, 1);
+                    // 3.2 is an HDR value: the browser adds it into the HDR buffer and tone-maps
+                    // everything together. This port tone-maps inside each shader instead, so an
+                    // untone-mapped additive pass clips to a flat white sheet up close. Run the
+                    // contribution through the AgX curve (not NkPost: its vignette would be
+                    // applied twice) and the edge/band structure survives at any distance.
+                    return float4(NkAgxTone(_Color.rgb * a * g * 3.2), 1);
                 }
                 else
                 {
@@ -82,7 +88,7 @@ Shader "NEON KAIDO/GigBeam"
                     float pulse = frac(t * 0.6);
                     float wave = smoothstep(0.12, 0.0, abs(r / 2.2 - pulse)) * (1.0 - pulse);
                     a = seg * 0.8 + wave * 1.2;
-                    return float4(_Color.rgb * a * 3.0, 1);
+                    return float4(NkAgxTone(_Color.rgb * a * 3.0), 1);
                 }
             }
             ENDHLSL

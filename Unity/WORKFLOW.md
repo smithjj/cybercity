@@ -165,6 +165,13 @@ creation through one guarded accessor that makes `Build` bail out and retry on t
 Related trap: `FindObjectsByType` does **not** enumerate `HideAndDontSave` objects — a "0 roots"
 probe is a lie, while `GameObject.Find` and the static reference still see them.
 
+The same trap catches anything that builds itself into the scene with `HideAndDontSave`
+materials: the gig marker was saved into `Main.unity`, so after every load its beam/ring
+renderers pointed at null materials and drew magenta. Runtime-only systems (crowd, car beam rigs,
+gig marker) must be `HideAndDontSave` **and** rebuilt by the editor push — and `Resources.FindObjectsOfTypeAll`
+is the only enumerator that sees them, so sweeps written against `FindObjectsByType` silently miss
+the stale copies.
+
 **Consequence for captures.** Never use `capture_game_view --save_path`. It forces the PNG into
 `Assets/Temp/`, which triggers exactly that import, wipes the light arrays mid-session and races the
 guard. `tools/nkcap.sh` takes the command's inline base64 instead and never touches the asset

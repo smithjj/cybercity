@@ -21,19 +21,55 @@ namespace NeonKaido
         {
             if (Gigs != null && Gigs.Marker != null) { UnityEngine.Object.Destroy(Gigs.Marker); }
             Settings.Load();
-            // sweep orphaned markers from earlier failed/partial builds
-            foreach (var go in Object.FindObjectsByType<GameObject>(UnityEngine.FindObjectsInactive.Include, UnityEngine.FindObjectsSortMode.None))
+            // sweep orphaned markers from earlier builds. Resources.FindObjectsOfTypeAll is the
+            // only enumerator that sees HideAndDontSave objects; FindObjectsByType silently misses
+            // them, which is how a stale marker could survive a rebuild.
+            foreach (var go in UnityEngine.Resources.FindObjectsOfTypeAll<GameObject>())
             {
-                if (go == null) continue; // fake-null: destroyed but still enumerated (scene unload race)
-                try { if (go.name == "gig-marker" && go.scene.IsValid()) Object.DestroyImmediate(go); }
+                if (go == null || go.name != "gig-marker") continue;
+                try { Object.DestroyImmediate(go); }
                 catch (System.Exception) { /* object died mid-sweep */ }
             }
-            var root = parent != null ? parent : new GameObject("Gameplay").transform;
+            // Reuse the saved root. Creating one when `parent` is null left an empty "Gameplay"
+            // object behind on every rebuild (the scene reached two), the same growth the crowd's
+            // runtime root had.
+            Transform root;
+            if (parent != null) root = parent;
+            else
+            {
+                var g = GameObject.Find("Gameplay");
+                root = g != null ? g.transform : new GameObject("Gameplay").transform;
+            }
             Gigs = new Gigs(root);
             _zone = default; _zoneCand = default; _zoneT = 0f;
             GameplayHud.Reset();
             GameplayHud.NewGigToast(Gigs.Current, silent: true);
             Built = true;
+        }
+
+        /// Editor-only: the marker is runtime state and not saved with the scene, so build it for
+        /// the edit-mode view. Deliberately does not set `Built` — the statics survive into Play
+        /// (domain reload is disabled), and a true here would stop Update from building.
+        public static void PreviewMarker()
+        {
+            if (Gigs != null && Gigs.Marker != null) return;
+            foreach (var g in UnityEngine.Resources.FindObjectsOfTypeAll<GameObject>())
+                if (g != null && g.name == "gig-marker") Object.DestroyImmediate(g);
+            var root = GameObject.Find("Gameplay");
+            Gigs = new Gigs(root != null ? root.transform : null);
+        }
+
+        /// The marker's distance fade (`_GigNear`) is a shader global that only Update pushes, so a
+        /// freshly loaded scene draws the beam at the far-distance gain until Play starts. The
+        /// editor push computes it from the camera, like the other runtime-only globals.
+        public static void PushEditorGlobals(Vector3 camPos)
+        {
+            // Statics reset on a domain reload while the saved marker stays in the scene, so fall
+            // back to the object itself before giving up.
+            var m = Gigs != null ? Gigs.Marker : null;
+            if (m == null) m = GameObject.Find("gig-marker");
+            if (m == null) return;
+            Shader.SetGlobalFloat("_GigNear", Mathf.Clamp01((Vector3.Distance(camPos, m.transform.position) - 8f) / 45f));
         }
 
         public static void Update(float dt, float t, Vector3 playerFeet)

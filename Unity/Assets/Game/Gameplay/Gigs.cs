@@ -51,8 +51,12 @@ namespace NeonKaido
             {
                 float a = (float)i / segs * Mathf.PI * 2f;
                 float x = Mathf.Sin(a), z = Mathf.Cos(a);
-                verts[i] = new Vector3(x, -0.5f, z);
-                verts[segs + 1 + i] = new Vector3(x, 0.5f, z);
+                // radius/height were ignored here, so every cylinder came out as a 1 m unit ring:
+                // the beam/halo/core floated at their JS Y offsets (100 / 130 m) as tiny hoops
+                // instead of standing on the ground, which reads as a broken marker stacked tens
+                // of metres into the sky.
+                verts[i] = new Vector3(x * radius, -height * 0.5f, z * radius);
+                verts[segs + 1 + i] = new Vector3(x * radius, height * 0.5f, z * radius);
                 uvs[i] = new Vector2((float)i / segs, 0f);
                 uvs[segs + 1 + i] = new Vector2((float)i / segs, 1f);
                 norms[i] = norms[segs + 1 + i] = new Vector3(x, 0f, z);
@@ -137,6 +141,10 @@ namespace NeonKaido
 
             Marker = new GameObject("gig-marker");
             Marker.transform.SetParent(parent, false);
+            // Runtime-only. Its materials are HideAndDontSave, so saving the scene bakes renderers
+            // that point at nothing and every beam/ring comes back magenta; the gig index and
+            // state are per-session anyway. Gameplay.PreviewMarker rebuilds it for the Editor.
+            Marker.hideFlags = HideFlags.HideAndDontSave;
 
             _beamMat = BeamMat(1f, 0.4f, 0f); _beamMat.SetColor("_Color", yellow);
             _haloMat = BeamMat(0.28f, 0f, 0f); _haloMat.SetColor("_Color", yellow);
